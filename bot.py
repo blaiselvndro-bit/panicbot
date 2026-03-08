@@ -46,7 +46,6 @@ confirmed INTEGER DEFAULT 0
 
 conn.commit()
 
-
 # ---------------- UTIL ----------------
 
 def main_keyboard():
@@ -55,7 +54,6 @@ def main_keyboard():
         resize_keyboard=True
     )
 
-
 def get_contacts(user_id):
     cursor.execute("SELECT contacts FROM users WHERE user_id=?", (user_id,))
     row = cursor.fetchone()
@@ -63,12 +61,10 @@ def get_contacts(user_id):
         return []
     return [int(x) for x in row[0].split(",")]
 
-
 def save_contacts(user_id, contacts):
     contacts_str = ",".join(str(x) for x in contacts)
     cursor.execute("UPDATE users SET contacts=? WHERE user_id=?", (contacts_str, user_id))
     conn.commit()
-
 
 # ---------------- START ----------------
 
@@ -97,7 +93,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["setup_msgs"] = [msg.message_id]
     context.user_data["step"] = "name"
 
-
 # ---------------- MENU ----------------
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,7 +106,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("⚙ PANICBOT MENU", reply_markup=keyboard)
 
-
 # ---------------- TEXT HANDLER ----------------
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,6 +113,25 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
+
+    # keyword safety stop
+    if step == "fake_chat" and text.lower().strip() == "i am ok":
+
+        contacts = get_contacts(user_id)
+
+        for c in contacts:
+            await context.bot.send_message(
+                c,
+                f"✅ @{update.message.from_user.username} is SAFE."
+            )
+
+        context.user_data.clear()
+
+        await update.message.reply_text(
+            "Glad you're safe.\nFake texting stopped.",
+            reply_markup=main_keyboard()
+        )
+        return
 
     # ---------- NAME SETUP ----------
     if step == "name":
@@ -157,7 +170,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
         return
-
 
     # ---------- ADD CONTACT ----------
     if step == "add_contact":
@@ -202,8 +214,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-
-    # ---------- FAKE TEXTING FLOW ----------
+    # ---------- FAKE TEXTING QUESTIONS ----------
 
     if step == "fake_q1":
         context.user_data["fake_q1"] = text
@@ -249,15 +260,33 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Information sent to your emergency contacts.\n"
             "Send your location as well.\n\n"
-            "From this point on just type away and tell me everything you see.\n"
-            "If you stop replying for more than 2 minutes I will alert your emergency contacts.\n"
-            "If you are safe press OK."
+            "⚠️ IMPORTANT:\n"
+            "Every 30 seconds I will send a message with an OK button.\n"
+            "You must press OK within 10 seconds.\n"
+            "If you don't, I will alert your emergency contacts.\n\n"
+            "You can also type 'I am OK' to stop fake texting."
         )
 
         asyncio.create_task(fake_chat_loop(context, user_id))
-
         return
 
+# ---------------- PHOTO HANDLER ----------------
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.message.from_user.id
+    contacts = get_contacts(user_id)
+
+    photo = update.message.photo[-1].file_id
+
+    for c in contacts:
+
+        await context.bot.send_message(
+            c,
+            f"📷 Photo sent by @{update.message.from_user.username}"
+        )
+
+        await context.bot.send_photo(c, photo)
 
 # ---------------- FAKE CHAT LOOP ----------------
 
@@ -271,7 +300,7 @@ async def fake_chat_loop(context, user_id):
 
     while True:
 
-        await asyncio.sleep(120)
+        await asyncio.sleep(30)
 
         if context.user_data.get("step") != "fake_chat":
             break
@@ -286,6 +315,19 @@ async def fake_chat_loop(context, user_id):
             reply_markup=keyboard
         )
 
+        await asyncio.sleep(10)
+
+        if context.user_data.get("step") == "fake_chat":
+
+            contacts = get_contacts(user_id)
+
+            for c in contacts:
+                await context.bot.send_message(
+                    c,
+                    "⚠️ User stopped responding during fake texting."
+                )
+
+            break
 
 # ---------------- BUTTON HANDLER ----------------
 
@@ -295,54 +337,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     user_id = query.from_user.id
-
-    if data == "edit_name":
-        context.user_data["step"] = "edit_name"
-        await query.edit_message_text("Enter your new name:")
-        return
-
-    if data == "update_contacts":
-
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("1", callback_data="contacts_1"),
-                InlineKeyboardButton("2", callback_data="contacts_2"),
-                InlineKeyboardButton("3", callback_data="contacts_3"),
-                InlineKeyboardButton("4", callback_data="contacts_4"),
-                InlineKeyboardButton("5", callback_data="contacts_5")
-            ]
-        ])
-
-        await query.edit_message_text(
-            "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
-            reply_markup=keyboard
-        )
-        return
-
-    if data == "fake_texting":
-        context.user_data["step"] = "fake_q1"
-        await query.edit_message_text("Who are you with?")
-        return
-
-    if data == "restart_setup":
-
-        cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
-        conn.commit()
-
-        context.user_data["step"] = "name"
-        await query.edit_message_text("Setup restarted.\nWhat is your name?")
-        return
-
-    if data.startswith("contacts_"):
-
-        count = int(data.split("_")[1])
-
-        context.user_data["contact_count"] = count
-        context.user_data["contacts"] = []
-        context.user_data["step"] = "add_contact"
-
-        await query.edit_message_text("Send username for contact 1\nExample: @username")
-        return
 
     if data == "fake_safe":
 
@@ -360,7 +354,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "When you are in danger press the button below.",
             reply_markup=main_keyboard()
         )
-
 
 # ---------------- LOCATION HANDLER ----------------
 
@@ -394,7 +387,6 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await trigger_alert(update, context, lat, lon)
 
-
 # ---------------- ALERT ----------------
 
 async def trigger_alert(update, context, lat, lon):
@@ -426,7 +418,6 @@ async def trigger_alert(update, context, lat, lon):
 
         context.job_queue.run_repeating(reminder_job, interval=60, first=60, data={"alert_id": alert_id})
 
-
 # ---------------- REMINDER ----------------
 
 async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
@@ -456,7 +447,6 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(contact, "🚨 EMERGENCY ALERT\nReminder: alert not yet confirmed.", reply_markup=keyboard)
     await context.bot.send_location(contact, lat, lon)
 
-
 # ---------------- APP ----------------
 
 app = ApplicationBuilder().token(TOKEN).build()
@@ -465,6 +455,7 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("menu", menu))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
 
 app.run_polling()
