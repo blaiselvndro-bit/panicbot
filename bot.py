@@ -7,7 +7,6 @@ from telegram import (
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -107,20 +106,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["step"] = "name"
 
 
-# ---------------- MENU ----------------
-
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Change Name", callback_data="change_name")],
-        [InlineKeyboardButton("Edit Emergency Contacts", callback_data="edit_contacts")]
-    ])
-
-    await update.message.reply_text(
-        "PANICBOT Menu",
-        reply_markup=keyboard
-    )
-
 # ---------------- TEXT HANDLER ----------------
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,7 +114,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # ---------- NAME ----------
     if step == "name":
 
         cursor.execute(
@@ -157,7 +141,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # ---------- ADD CONTACT ----------
     if step == "add_contact":
 
         username = text.replace("@","")
@@ -180,7 +163,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 "⚠️ That user hasn't started PANICBOT yet.\n\n"
-                "Your emergency contact must start the bot first so they can receive alerts.",
+                "Ask them to start the bot first so they can receive alerts.",
                 reply_markup=share
             )
             return
@@ -201,8 +184,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_contacts(user_id, context.user_data["contacts"])
 
             await update.message.reply_text(
-                "Setup Complete. When you are in danger press the button below to send your location.\n\n"
-                "⚠️ Tip: PIN PANICBOT for quick access.",
+                "Setup Complete. When you are in danger press the button below.",
                 reply_markup=main_keyboard()
             )
 
@@ -233,11 +215,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
     if data == "cancel_sos":
 
         context.user_data["cancelled"] = True
         await query.edit_message_text("SOS cancelled.")
         return
+
+
+    if data == "send_now":
+
+        context.user_data["force_send"] = True
+        await query.edit_message_text("Sending SOS now...")
+        return
+
 
     if data.startswith("confirm_"):
 
@@ -272,6 +263,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
+
 # ---------------- LOCATION HANDLER ----------------
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -280,21 +272,33 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lon = update.message.location.longitude
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Cancel SOS", callback_data="cancel_sos")]
+        [
+            InlineKeyboardButton("Send Now", callback_data="send_now"),
+            InlineKeyboardButton("Cancel", callback_data="cancel_sos")
+        ]
     ])
 
-    await update.message.reply_text(
+    msg = await update.message.reply_text(
         "SOS will send in 10 seconds.",
         reply_markup=keyboard
     )
 
-    await asyncio.sleep(10)
+    for i in range(10):
 
-    if context.user_data.get("cancelled"):
-        context.user_data["cancelled"] = False
-        return
+        await asyncio.sleep(1)
+
+        if context.user_data.get("cancelled"):
+            context.user_data["cancelled"] = False
+            return
+
+        if context.user_data.get("force_send"):
+            context.user_data["force_send"] = False
+            break
+
+    await msg.edit_text("SOS has been sent. Please wait for confirmation.")
 
     await trigger_alert(update, context, lat, lon)
+
 
 # ---------------- ALERT ----------------
 
@@ -335,10 +339,11 @@ async def trigger_alert(update, context, lat, lon):
 
         context.job_queue.run_repeating(
             reminder_job,
-            interval=120,
-            first=120,
+            interval=60,
+            first=60,
             data={"alert_id": alert_id}
         )
+
 
 # ---------------- REMINDER ----------------
 
@@ -368,18 +373,18 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         contact,
-        "🚨 REMINDER: Emergency alert not yet confirmed.",
+        "🚨 EMERGENCY ALERT\nReminder: alert not yet confirmed.",
         reply_markup=keyboard
     )
 
     await context.bot.send_location(contact, lat, lon)
+
 
 # ---------------- APP ----------------
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("menu", menu))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
