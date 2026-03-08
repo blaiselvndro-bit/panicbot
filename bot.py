@@ -119,7 +119,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # Name setup
+    # Stop fake texting keyword
+    if step == "fake_chat" and text.lower().strip() == "i am ok":
+
+        contacts = get_contacts(user_id)
+
+        for c in contacts:
+            await context.bot.send_message(c, f"✅ @{update.message.from_user.username} is SAFE.")
+
+        context.user_data.clear()
+
+        await update.message.reply_text("Glad you're safe.", reply_markup=main_keyboard())
+        return
+
     if step == "name":
 
         cursor.execute("UPDATE users SET name=? WHERE user_id=?", (text, user_id))
@@ -141,7 +153,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Edit name
     if step == "edit_name":
 
         cursor.execute("UPDATE users SET name=? WHERE user_id=?", (text, user_id))
@@ -155,7 +166,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Add contact
     if step == "add_contact":
 
         username = text.replace("@","")
@@ -190,6 +200,97 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+    # ---------- Fake texting questions ----------
+
+    if step == "fake_q1":
+        context.user_data["fake_q1"] = text
+        context.user_data["step"] = "fake_q2"
+        await update.message.reply_text("Where are you?")
+        return
+
+    if step == "fake_q2":
+        context.user_data["fake_q2"] = text
+        context.user_data["step"] = "fake_q3"
+        await update.message.reply_text("Any landmarks you can see?")
+        return
+
+    if step == "fake_q3":
+        context.user_data["fake_q3"] = text
+        context.user_data["step"] = "fake_q4"
+        await update.message.reply_text("Are you in a car? If yes give plate number.")
+        return
+
+    if step == "fake_q4":
+
+        context.user_data["fake_q4"] = text
+
+        username = update.message.from_user.username
+        contacts = get_contacts(user_id)
+
+        message = (
+            f"@{username} may be in danger.\n\n"
+            f"People I'm with: {context.user_data['fake_q1']}\n"
+            f"Location: {context.user_data['fake_q2']}\n"
+            f"Landmarks: {context.user_data['fake_q3']}\n"
+            f"Car plate: {context.user_data['fake_q4']}"
+        )
+
+        for c in contacts:
+            await context.bot.send_message(c, message)
+
+        context.user_data["step"] = "fake_chat"
+        context.user_data["ok_pressed"] = False
+
+        await update.message.reply_text(
+            "Information sent to emergency contacts.\n\n"
+            "Every 30 seconds I will send an OK button.\n"
+            "Press OK within 10 seconds."
+        )
+
+        asyncio.create_task(fake_chat_loop(context, user_id))
+
+
+# ---------------- FAKE CHAT LOOP ----------------
+
+async def fake_chat_loop(context, user_id):
+
+    replies = [
+        "Really? That's great! Are you okay?",
+        "Oh that is so cool!",
+        "Tell me more."
+    ]
+
+    while True:
+
+        await asyncio.sleep(30)
+
+        if context.user_data.get("step") != "fake_chat":
+            break
+
+        context.user_data["ok_pressed"] = False
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("OK", callback_data="fake_ok")]
+        ])
+
+        await context.bot.send_message(
+            user_id,
+            random.choice(replies),
+            reply_markup=keyboard
+        )
+
+        await asyncio.sleep(10)
+
+        if not context.user_data.get("ok_pressed"):
+
+            contacts = get_contacts(user_id)
+
+            for c in contacts:
+                await context.bot.send_message(
+                    c,
+                    "⚠️ User stopped responding during fake texting."
+                )
+
 
 # ---------------- PHOTO HANDLER ----------------
 
@@ -205,10 +306,12 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1].file_id
 
     for c in contacts:
+
         await context.bot.send_message(
             c,
             f"📷 Photo sent by @{username}"
         )
+
         await context.bot.send_photo(c, photo)
 
 
@@ -222,7 +325,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    # confirm alert
+    if data == "fake_ok":
+        context.user_data["ok_pressed"] = True
+        return
+
     if data.startswith("confirm_"):
 
         alert_id = int(data.split("_")[1])
@@ -241,13 +347,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # edit name button
     if data == "edit_name":
         context.user_data["step"] = "edit_name"
         await query.edit_message_text("Enter your new name:")
         return
 
-    # update contacts button
     if data == "update_contacts":
 
         keyboard = InlineKeyboardMarkup([
@@ -266,13 +370,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # fake texting start
     if data == "fake_texting":
         context.user_data["step"] = "fake_q1"
         await query.edit_message_text("Who are you with?")
         return
 
-    # restart setup
     if data == "restart_setup":
 
         cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
@@ -283,7 +385,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Setup restarted.\nWhat is your name?")
         return
 
-    # choose contact count
     if data.startswith("contacts_"):
 
         count = int(data.split("_")[1])
@@ -295,12 +396,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Send username for contact 1\nExample: @username")
         return
 
-    # sos cancel
     if data == "cancel_sos":
         context.user_data["cancelled"] = True
         return
 
-    # sos send now
     if data == "send_now":
         context.user_data["force_send"] = True
         return
@@ -408,7 +507,7 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         contact,
-        f"🚨 EMERGENCY REMINDER\n\nHave you received the emergency alert from @{sender_username}?\nPlease confirm.",
+        f"🚨 EMERGENCY REMINDER\n\nHave you received the emergency alert from @{sender_username}?",
         reply_markup=keyboard
     )
 
