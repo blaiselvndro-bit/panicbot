@@ -153,7 +153,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
 
         await update.message.reply_text(
-            "Name updated successfully.",
+            "Name updated.",
             reply_markup=main_keyboard()
         )
         return
@@ -203,13 +203,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # ---------- FAKE TEXT CHAT ----------
-    if step == "fake_chat":
-        context.user_data["last_message"] = asyncio.get_event_loop().time()
-        return
-
-
-    # ---------- FAKE TEXT QUESTIONS ----------
+    # ---------- FAKE TEXTING FLOW ----------
 
     if step == "fake_q1":
         context.user_data["fake_q1"] = text
@@ -256,7 +250,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Information sent to your emergency contacts.\n"
             "Send your location as well.\n\n"
             "From this point on just type away and tell me everything you see.\n"
-            "If you stop replying for more than 2 minutes I will alert your emergency contacts.\n\n"
+            "If you stop replying for more than 2 minutes I will alert your emergency contacts.\n"
             "If you are safe press OK."
         )
 
@@ -368,6 +362,101 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# ---------------- LOCATION HANDLER ----------------
+
+async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    lat = update.message.location.latitude
+    lon = update.message.location.longitude
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Send Now", callback_data="send_now"),
+            InlineKeyboardButton("Cancel", callback_data="cancel_sos")
+        ]
+    ])
+
+    msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
+
+    for i in range(10):
+
+        await asyncio.sleep(1)
+
+        if context.user_data.get("cancelled"):
+            context.user_data["cancelled"] = False
+            return
+
+        if context.user_data.get("force_send"):
+            context.user_data["force_send"] = False
+            break
+
+    await msg.edit_text("SOS sent to your emergency contacts. Please wait for confirmation.")
+
+    await trigger_alert(update, context, lat, lon)
+
+
+# ---------------- ALERT ----------------
+
+async def trigger_alert(update, context, lat, lon):
+
+    user_id = update.effective_user.id
+
+    cursor.execute("SELECT name FROM users WHERE user_id=?", (user_id,))
+    name = cursor.fetchone()[0]
+
+    contacts = get_contacts(user_id)
+
+    for contact in contacts:
+
+        cursor.execute(
+            "INSERT INTO alerts (sender_id,contact_id,latitude,longitude) VALUES (?,?,?,?)",
+            (user_id, contact, lat, lon)
+        )
+
+        alert_id = cursor.lastrowid
+        conn.commit()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+        ])
+
+        await context.bot.send_message(contact, f"🚨 EMERGENCY ALERT\n{name} may be in danger.", reply_markup=keyboard)
+
+        await context.bot.send_location(contact, lat, lon)
+
+        context.job_queue.run_repeating(reminder_job, interval=60, first=60, data={"alert_id": alert_id})
+
+
+# ---------------- REMINDER ----------------
+
+async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
+
+    alert_id = context.job.data["alert_id"]
+
+    cursor.execute(
+        "SELECT sender_id,contact_id,latitude,longitude,confirmed FROM alerts WHERE alert_id=?",
+        (alert_id,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        return
+
+    sender, contact, lat, lon, confirmed = row
+
+    if confirmed:
+        context.job.schedule_removal()
+        return
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+    ])
+
+    await context.bot.send_message(contact, "🚨 EMERGENCY ALERT\nReminder: alert not yet confirmed.", reply_markup=keyboard)
+    await context.bot.send_location(contact, lat, lon)
+
+
 # ---------------- APP ----------------
 
 app = ApplicationBuilder().token(TOKEN).build()
@@ -375,7 +464,7 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("menu", menu))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-app.add_handler(MessageHandler(filters.LOCATION, text_handler))
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
 
 app.run_polling()
