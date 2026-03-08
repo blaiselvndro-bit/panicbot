@@ -46,22 +46,44 @@ confirmed INTEGER DEFAULT 0
 
 conn.commit()
 
-
 # ---------------- START ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
+    user_id = user.id
 
     cursor.execute(
         "INSERT OR IGNORE INTO users (user_id, username) VALUES (?,?)",
-        (user.id, user.username)
+        (user_id, user.username)
     )
 
     conn.commit()
 
+    cursor.execute(
+        "SELECT name,contact1 FROM users WHERE user_id=?",
+        (user_id,)
+    )
+
+    data = cursor.fetchone()
+
+    # If already configured
+    if data and data[0] and data[1]:
+
+        keyboard = [[KeyboardButton("📍 Send Location", request_location=True)]]
+
+        await update.message.reply_text(
+            "PANICBOT is ready.\n\nPress the button below if you need help.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                resize_keyboard=True
+            )
+        )
+        return
+
     await update.message.reply_text(
-        "🚨 Welcome to PANICBOT\n\nWhat is your name?"
+        "🚨 Welcome to PANICBOT\n\n"
+        "First, what is your name?"
     )
 
     context.user_data["step"] = "name"
@@ -86,7 +108,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
 
         await update.message.reply_text(
-            "Send the username of your FIRST emergency contact.\nExample: @username"
+            "Send the username of your FIRST emergency contact.\nExample:\n@username"
         )
 
         context.user_data["step"] = "contact1"
@@ -133,6 +155,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if text == "SKIP":
             contact2 = None
+
         else:
 
             username = text.replace("@","")
@@ -164,42 +187,71 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[KeyboardButton("📍 Send Location", request_location=True)]]
 
         await update.message.reply_text(
-            "✅ Setup complete.\n\nPress the button below when you need to send your location.",
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            "✅ Setup Complete.\n\n"
+            "When you are in danger press the button below to send your location.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                resize_keyboard=True
+            )
         )
 
         context.user_data["step"] = None
+        return
 
 
 # ---------------- LOCATION HANDLER ----------------
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    sender_id = update.message.from_user.id
+    user_id = update.message.from_user.id
     lat = update.message.location.latitude
     lon = update.message.location.longitude
 
     cursor.execute(
         "SELECT name,contact1,contact2 FROM users WHERE user_id=?",
-        (sender_id,)
+        (user_id,)
     )
 
-    name, contact1, contact2 = cursor.fetchone()
+    data = cursor.fetchone()
 
-    for contact in [contact1, contact2]:
+    if not data:
+        await update.message.reply_text("Run /start first.")
+        return
+
+    name, contact1, contact2 = data
+
+    contacts = [contact1, contact2]
+
+    for contact in contacts:
 
         if not contact:
             continue
 
         cursor.execute(
             "INSERT INTO alerts (sender_id,contact_id,latitude,longitude) VALUES (?,?,?,?)",
-            (sender_id,contact,lat,lon)
+            (user_id, contact, lat, lon)
         )
 
         alert_id = cursor.lastrowid
         conn.commit()
 
-        await send_alert(context, alert_id, name, contact, lat, lon)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+        ])
+
+        message = (
+            f"🚨 EMERGENCY ALERT\n\n"
+            f"{name} may be in danger.\n\n"
+            f"Location:\nhttps://maps.google.com/?q={lat},{lon}"
+        )
+
+        await context.bot.send_message(
+            chat_id=contact,
+            text=message,
+            reply_markup=keyboard
+        )
+
+        await context.bot.send_location(contact, lat, lon)
 
         # schedule reminder
         context.job_queue.run_repeating(
@@ -209,30 +261,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data={"alert_id": alert_id}
         )
 
-    await update.message.reply_text("🚨 Emergency alert sent.")
-
-
-# ---------------- SEND ALERT ----------------
-
-async def send_alert(context, alert_id, name, contact, lat, lon):
-
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
-    ])
-
-    message = (
-        f"🚨 EMERGENCY ALERT\n\n"
-        f"{name} may be in danger.\n\n"
-        f"Location:\nhttps://maps.google.com/?q={lat},{lon}"
+    await update.message.reply_text(
+        "🚨 Emergency alert sent to your contacts."
     )
-
-    await context.bot.send_message(
-        chat_id=contact,
-        text=message,
-        reply_markup=keyboard
-    )
-
-    await context.bot.send_location(contact, lat, lon)
 
 
 # ---------------- REMINDER JOB ----------------
@@ -251,7 +282,7 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
     if not row:
         return
 
-    sender_id, contact, lat, lon, confirmed = row
+    sender_id, contact_id, lat, lon, confirmed = row
 
     if confirmed:
         context.job.schedule_removal()
@@ -264,12 +295,28 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 
     name = cursor.fetchone()[0]
 
-    await send_alert(context, alert_id, name, contact, lat, lon)
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+    ])
+
+    message = (
+        f"🚨 REMINDER\n\n"
+        f"{name} may be in danger.\n\n"
+        f"Location:\nhttps://maps.google.com/?q={lat},{lon}"
+    )
+
+    await context.bot.send_message(
+        chat_id=contact_id,
+        text=message,
+        reply_markup=keyboard
+    )
+
+    await context.bot.send_location(contact_id, lat, lon)
 
 
-# ---------------- CONFIRM BUTTON ----------------
+# ---------------- CONFIRM HANDLER ----------------
 
-async def confirm_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
@@ -290,15 +337,13 @@ async def confirm_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sender_id = cursor.fetchone()[0]
 
-    confirmer = query.from_user.username
+    username = query.from_user.username
 
-    await query.edit_message_text(
-        "✅ Emergency alert confirmed."
-    )
+    await query.edit_message_text("✅ Emergency alert confirmed.")
 
     await context.bot.send_message(
         sender_id,
-        f"✅ Your emergency contact @{confirmer} confirmed receiving your alert."
+        f"✅ Your emergency contact @{username} confirmed receiving your alert."
     )
 
 
@@ -309,6 +354,6 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
-app.add_handler(CallbackQueryHandler(confirm_alert, pattern="confirm_"))
+app.add_handler(CallbackQueryHandler(confirm_handler, pattern="confirm_"))
 
 app.run_polling()
