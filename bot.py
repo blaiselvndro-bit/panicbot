@@ -20,8 +20,6 @@ from telegram.ext import (
 TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = "@panic_sos_bot"
 
-# ---------------- DATABASE ----------------
-
 conn = sqlite3.connect("database.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -47,6 +45,7 @@ confirmed INTEGER DEFAULT 0
 
 conn.commit()
 
+
 # ---------------- UTIL ----------------
 
 def main_keyboard():
@@ -55,26 +54,20 @@ def main_keyboard():
         resize_keyboard=True
     )
 
-def get_contacts(user_id):
 
+def get_contacts(user_id):
     cursor.execute("SELECT contacts FROM users WHERE user_id=?", (user_id,))
     row = cursor.fetchone()
-
     if not row or not row[0]:
         return []
-
     return [int(x) for x in row[0].split(",")]
 
+
 def save_contacts(user_id, contacts):
-
     contacts_str = ",".join(str(x) for x in contacts)
-
-    cursor.execute(
-        "UPDATE users SET contacts=? WHERE user_id=?",
-        (contacts_str, user_id)
-    )
-
+    cursor.execute("UPDATE users SET contacts=? WHERE user_id=?", (contacts_str, user_id))
     conn.commit()
+
 
 # ---------------- START ----------------
 
@@ -89,26 +82,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn.commit()
 
-    cursor.execute(
-        "SELECT name,contacts FROM users WHERE user_id=?",
-        (user.id,)
-    )
-
+    cursor.execute("SELECT name,contacts FROM users WHERE user_id=?", (user.id,))
     row = cursor.fetchone()
 
     if row and row[0] and row[1]:
-
         await update.message.reply_text(
-            "When you are in danger press the button below.\n\n"
-            "⚠️ Tip: PIN PANICBOT for quick access.",
+            "When you are in danger press the button below.",
             reply_markup=main_keyboard()
         )
         return
 
-    await update.message.reply_text(
-        "🚨 Welcome to PANICBOT\n\nWhat is your name?"
-    )
-
+    msg = await update.message.reply_text("🚨 Welcome to PANICBOT\n\nWhat is your name?")
+    context.user_data["setup_msgs"] = [msg.message_id]
     context.user_data["step"] = "name"
 
 
@@ -119,13 +104,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Edit Name", callback_data="edit_name")],
         [InlineKeyboardButton("Update Contacts", callback_data="update_contacts")],
+        [InlineKeyboardButton("Fake Texting", callback_data="fake_texting")],
         [InlineKeyboardButton("Restart Setup", callback_data="restart_setup")]
     ])
 
-    await update.message.reply_text(
-        "⚙ PANICBOT MENU",
-        reply_markup=keyboard
-    )
+    await update.message.reply_text("⚙ PANICBOT MENU", reply_markup=keyboard)
+
 
 # ---------------- TEXT HANDLER ----------------
 
@@ -135,13 +119,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
+    # ---------- NAME SETUP ----------
     if step == "name":
 
-        cursor.execute(
-            "UPDATE users SET name=? WHERE user_id=?",
-            (text, user_id)
-        )
-
+        cursor.execute("UPDATE users SET name=? WHERE user_id=?", (text, user_id))
         conn.commit()
 
         keyboard = InlineKeyboardMarkup([
@@ -154,30 +135,26 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
 
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "How many emergency contacts do you want?",
             reply_markup=keyboard
         )
+
+        context.user_data["setup_msgs"].append(msg.message_id)
         return
 
 
+    # ---------- ADD CONTACT ----------
     if step == "add_contact":
 
         username = text.replace("@","")
 
-        cursor.execute(
-            "SELECT user_id FROM users WHERE username=?",
-            (username,)
-        )
-
+        cursor.execute("SELECT user_id FROM users WHERE username=?", (username,))
         result = cursor.fetchone()
 
         if not result:
-
             await update.message.reply_text(
-                "⚠️ That user hasn't started PANICBOT yet.\n\n"
-                "Ask them to start the bot first.\n\n"
-                f"Copy and send them this:\n{BOT_USERNAME}"
+                f"That user hasn't started PANICBOT.\n\nSend them this:\n{BOT_USERNAME}"
             )
             return
 
@@ -188,16 +165,22 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if current < total:
 
-            await update.message.reply_text(
-                f"Send username for contact {current+1}\nExample: @username"
-            )
+            msg = await update.message.reply_text(f"Send username for contact {current+1}")
+            context.user_data["setup_msgs"].append(msg.message_id)
 
         else:
 
             save_contacts(user_id, context.user_data["contacts"])
 
+            # DELETE setup messages
+            for mid in context.user_data["setup_msgs"]:
+                try:
+                    await context.bot.delete_message(update.effective_chat.id, mid)
+                except:
+                    pass
+
             await update.message.reply_text(
-                "Setup Complete. When you are in danger press the button below.",
+                "Setup Complete.\nWhen you are in danger press the button below.",
                 reply_markup=main_keyboard()
             )
 
@@ -206,20 +189,69 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-# ---------------- INLINE BUTTONS ----------------
+    # ---------- FAKE TEXTING FLOW ----------
+
+    if step == "fake_q1":
+        context.user_data["fake_q1"] = text
+        context.user_data["step"] = "fake_q2"
+        await update.message.reply_text("Where are you?")
+        return
+
+    if step == "fake_q2":
+        context.user_data["fake_q2"] = text
+        context.user_data["step"] = "fake_q3"
+        await update.message.reply_text("Any landmarks you can see?")
+        return
+
+    if step == "fake_q3":
+        context.user_data["fake_q3"] = text
+        context.user_data["step"] = "fake_q4"
+        await update.message.reply_text("Are you in a car? If yes give plate number.")
+        return
+
+    if step == "fake_q4":
+
+        context.user_data["fake_q4"] = text
+
+        cursor.execute("SELECT username FROM users WHERE user_id=?", (user_id,))
+        username = cursor.fetchone()[0]
+
+        message = (
+            f"@{username} may be in danger.\n\n"
+            f"Clues:\n"
+            f"Who: {context.user_data['fake_q1']}\n"
+            f"Where: {context.user_data['fake_q2']}\n"
+            f"Landmarks: {context.user_data['fake_q3']}\n"
+            f"Car plate: {context.user_data['fake_q4']}"
+        )
+
+        contacts = get_contacts(user_id)
+
+        for c in contacts:
+            await context.bot.send_message(c, message)
+
+        context.user_data.clear()
+
+        await update.message.reply_text(
+            "Information sent to your emergency contacts.\nSend your location as well.",
+            reply_markup=main_keyboard()
+        )
+
+        return
+
+
+# ---------------- BUTTON HANDLER ----------------
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
-
     data = query.data
     user_id = query.from_user.id
 
     if data == "edit_name":
-
-        await query.edit_message_text("Enter your new name:")
         context.user_data["step"] = "name"
+        await query.edit_message_text("Enter your new name:")
         return
 
     if data == "update_contacts":
@@ -234,27 +266,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
 
-        await query.edit_message_text(
-            "How many emergency contacts do you want?",
-            reply_markup=keyboard
-        )
+        await query.edit_message_text("How many contacts do you want?", reply_markup=keyboard)
         return
 
+    if data == "fake_texting":
+        context.user_data["step"] = "fake_q1"
+        await query.edit_message_text("Who are you with?")
+        return
 
     if data == "restart_setup":
 
-        cursor.execute(
-            "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
-            (user_id,)
-        )
-
+        cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
         conn.commit()
 
-        await query.edit_message_text(
-            "Setup restarted.\n\nWhat is your name?"
-        )
-
         context.user_data["step"] = "name"
+        await query.edit_message_text("Setup restarted.\nWhat is your name?")
         return
 
 
@@ -266,9 +292,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["contacts"] = []
         context.user_data["step"] = "add_contact"
 
-        await query.edit_message_text(
-            "Send username for contact 1\nExample: @username"
-        )
+        await query.edit_message_text("Send username for contact 1\nExample: @username")
         return
 
 
@@ -282,7 +306,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "send_now":
 
         context.user_data["force_send"] = True
-        await query.edit_message_text("Sending SOS now...")
+        await query.edit_message_text("SOS sent to your emergency contacts. Please wait for confirmation.")
         return
 
 
@@ -290,18 +314,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         alert_id = int(data.split("_")[1])
 
-        cursor.execute(
-            "UPDATE alerts SET confirmed=1 WHERE alert_id=?",
-            (alert_id,)
-        )
-
+        cursor.execute("UPDATE alerts SET confirmed=1 WHERE alert_id=?", (alert_id,))
         conn.commit()
 
-        cursor.execute(
-            "SELECT sender_id FROM alerts WHERE alert_id=?",
-            (alert_id,)
-        )
-
+        cursor.execute("SELECT sender_id FROM alerts WHERE alert_id=?", (alert_id,))
         sender = cursor.fetchone()[0]
 
         username = query.from_user.username
@@ -310,12 +326,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             sender,
-            f"@{username} confirmed your SOS."
-        )
-
-        await context.bot.send_message(
-            sender,
-            "When you are in danger press SEND LOCATION.",
+            f"@{username} confirmed your SOS.",
             reply_markup=main_keyboard()
         )
 
@@ -334,10 +345,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ])
 
-    msg = await update.message.reply_text(
-        "SOS will send in 10 seconds.",
-        reply_markup=keyboard
-    )
+    msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
 
     for i in range(10):
 
@@ -351,7 +359,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["force_send"] = False
             break
 
-    await msg.edit_text("The SOS has been sent. Please wait for confirmation.")
+    await msg.edit_text("SOS sent to your emergency contacts. Please wait for confirmation.")
 
     await trigger_alert(update, context, lat, lon)
 
@@ -362,11 +370,7 @@ async def trigger_alert(update, context, lat, lon):
 
     user_id = update.effective_user.id
 
-    cursor.execute(
-        "SELECT name FROM users WHERE user_id=?",
-        (user_id,)
-    )
-
+    cursor.execute("SELECT name FROM users WHERE user_id=?", (user_id,))
     name = cursor.fetchone()[0]
 
     contacts = get_contacts(user_id)
@@ -385,20 +389,11 @@ async def trigger_alert(update, context, lat, lon):
             [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
         ])
 
-        await context.bot.send_message(
-            contact,
-            f"🚨 EMERGENCY ALERT\n{name} may be in danger.",
-            reply_markup=keyboard
-        )
+        await context.bot.send_message(contact, f"🚨 EMERGENCY ALERT\n{name} may be in danger.", reply_markup=keyboard)
 
         await context.bot.send_location(contact, lat, lon)
 
-        context.job_queue.run_repeating(
-            reminder_job,
-            interval=60,
-            first=60,
-            data={"alert_id": alert_id}
-        )
+        context.job_queue.run_repeating(reminder_job, interval=60, first=60, data={"alert_id": alert_id})
 
 
 # ---------------- REMINDER ----------------
@@ -427,12 +422,7 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
     ])
 
-    await context.bot.send_message(
-        contact,
-        "🚨 EMERGENCY ALERT\nReminder: alert not yet confirmed.",
-        reply_markup=keyboard
-    )
-
+    await context.bot.send_message(contact, "🚨 EMERGENCY ALERT\nReminder: alert not yet confirmed.", reply_markup=keyboard)
     await context.bot.send_location(contact, lat, lon)
 
 
