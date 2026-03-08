@@ -190,24 +190,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    if step == "fake_q1":
-        context.user_data["fake_q1"] = text
-        context.user_data["step"] = "fake_q2"
-        await update.message.reply_text("Where are you?")
-        return
-
-    if step == "fake_q2":
-        context.user_data["fake_q2"] = text
-        context.user_data["step"] = "fake_q3"
-        await update.message.reply_text("Any landmarks you can see?")
-        return
-
-    if step == "fake_q3":
-        context.user_data["fake_q3"] = text
-        context.user_data["step"] = "fake_q4"
-        await update.message.reply_text("Are you in a car? If yes give plate number.")
-        return
-
 # ---------------- BUTTON HANDLER ----------------
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -216,7 +198,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
-    user_id = query.from_user.id
 
     if data.startswith("confirm_"):
 
@@ -238,6 +219,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
+
+# ---------------- LOCATION HANDLER ----------------
+
+async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    lat = update.message.location.latitude
+    lon = update.message.location.longitude
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Send Now", callback_data="send_now"),
+            InlineKeyboardButton("Cancel", callback_data="cancel_sos")
+        ]
+    ])
+
+    msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
+
+    for i in range(10):
+
+        await asyncio.sleep(1)
+
+        if context.user_data.get("cancelled"):
+            context.user_data["cancelled"] = False
+            return
+
+        if context.user_data.get("force_send"):
+            context.user_data["force_send"] = False
+            break
+
+    await msg.edit_text("SOS sent to your emergency contacts. Please wait for confirmation.")
+
+    await trigger_alert(update, context, lat, lon)
 
 # ---------------- ALERT ----------------
 
@@ -307,7 +320,7 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         contact,
-        f"🚨 EMERGENCY REMINDER\n\nHave you received the emergency alert from @{sender_username}?",
+        f"🚨 EMERGENCY REMINDER\n\nHave you received the emergency alert from @{sender_username}?\nPlease confirm.",
         reply_markup=keyboard
     )
 
