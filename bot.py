@@ -7,6 +7,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ReplyKeyboardRemove
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -18,7 +19,7 @@ from telegram.ext import (
 )
 
 TOKEN = os.getenv("BOT_TOKEN")
-BOT_USERNAME = "YOUR_BOT_USERNAME"
+BOT_USERNAME = "panic_sos_bot"
 
 # ---------------- DATABASE ----------------
 
@@ -93,7 +94,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row and row[0] and row[1]:
 
         await update.message.reply_text(
-            "When you are in danger press the button below.",
+            "When you are in danger press the button below.\n\n"
+            "⚠️ Tip: PIN PANICBOT for fast emergency access.",
             reply_markup=main_keyboard()
         )
         return
@@ -103,6 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     context.user_data["step"] = "name"
+
 
 # ---------------- MENU ----------------
 
@@ -126,6 +129,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
+    # ---------- NAME ----------
     if step == "name":
 
         cursor.execute(
@@ -150,7 +154,62 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
 
-        context.user_data["step"] = "choose_contacts"
+        return
+
+
+    # ---------- ADD CONTACT ----------
+    if step == "add_contact":
+
+        username = text.replace("@","")
+
+        cursor.execute(
+            "SELECT user_id FROM users WHERE username=?",
+            (username,)
+        )
+
+        result = cursor.fetchone()
+
+        if not result:
+
+            share = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "Share PANICBOT",
+                    url=f"https://t.me/{BOT_USERNAME}"
+                )]
+            ])
+
+            await update.message.reply_text(
+                "⚠️ That user hasn't started PANICBOT yet.\n\n"
+                "Your emergency contact must start the bot first so they can receive alerts.",
+                reply_markup=share
+            )
+            return
+
+        context.user_data["contacts"].append(result[0])
+
+        current = len(context.user_data["contacts"])
+        total = context.user_data["contact_count"]
+
+        if current < total:
+
+            await update.message.reply_text(
+                f"Send username for contact {current+1}\nExample: @username"
+            )
+
+        else:
+
+            save_contacts(user_id, context.user_data["contacts"])
+
+            await update.message.reply_text(
+                "Setup Complete. When you are in danger press the button below to send your location.\n\n"
+                "⚠️ Tip: PIN PANICBOT for quick access.",
+                reply_markup=main_keyboard()
+            )
+
+            context.user_data.clear()
+
+        return
+
 
 # ---------------- INLINE BUTTONS ----------------
 
@@ -160,9 +219,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
-    user_id = query.from_user.id
 
-    # choose number of contacts
     if data.startswith("contacts_"):
 
         count = int(data.split("_")[1])
@@ -176,14 +233,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # cancel sos
     if data == "cancel_sos":
 
         context.user_data["cancelled"] = True
         await query.edit_message_text("SOS cancelled.")
         return
 
-    # confirm sos
     if data.startswith("confirm_"):
 
         alert_id = int(data.split("_")[1])
@@ -201,6 +256,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         sender = cursor.fetchone()[0]
+
         username = query.from_user.username
 
         await query.edit_message_text("Alert confirmed.")
@@ -227,7 +283,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Cancel SOS", callback_data="cancel_sos")]
     ])
 
-    msg = await update.message.reply_text(
+    await update.message.reply_text(
         "SOS will send in 10 seconds.",
         reply_markup=keyboard
     )
