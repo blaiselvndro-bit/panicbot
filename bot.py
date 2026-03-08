@@ -1,8 +1,7 @@
-# PANICBOT FINAL VERSION
-
 import os
 import sqlite3
 import asyncio
+import random
 from telegram import (
     Update,
     KeyboardButton,
@@ -47,6 +46,7 @@ confirmed INTEGER DEFAULT 0
 
 conn.commit()
 
+
 # ---------------- UTIL ----------------
 
 def main_keyboard():
@@ -69,6 +69,7 @@ def save_contacts(user_id, contacts):
     cursor.execute("UPDATE users SET contacts=? WHERE user_id=?", (contacts_str, user_id))
     conn.commit()
 
+
 # ---------------- START ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,6 +80,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "INSERT OR IGNORE INTO users (user_id, username) VALUES (?,?)",
         (user.id, user.username)
     )
+
     conn.commit()
 
     cursor.execute("SELECT name,contacts FROM users WHERE user_id=?", (user.id,))
@@ -95,6 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["setup_msgs"] = [msg.message_id]
     context.user_data["step"] = "name"
 
+
 # ---------------- MENU ----------------
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -108,6 +111,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("⚙ PANICBOT MENU", reply_markup=keyboard)
 
+
 # ---------------- TEXT HANDLER ----------------
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,7 +120,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # ---------- SET NAME ----------
+    # ---------- NAME SETUP ----------
     if step == "name":
 
         cursor.execute("UPDATE users SET name=? WHERE user_id=?", (text, user_id))
@@ -132,10 +136,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
 
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "How many emergency contacts do you want?",
             reply_markup=keyboard
         )
+
+        context.user_data["setup_msgs"].append(msg.message_id)
         return
 
     # ---------- EDIT NAME ----------
@@ -152,6 +158,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
     # ---------- ADD CONTACT ----------
     if step == "add_contact":
 
@@ -162,7 +169,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not result:
             await update.message.reply_text(
-                f"That user hasn't started PANICBOT.\nSend them this:\n{BOT_USERNAME}"
+                f"That user hasn't started PANICBOT.\n\nSend them this:\n{BOT_USERNAME}"
             )
             return
 
@@ -172,23 +179,119 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total = context.user_data["contact_count"]
 
         if current < total:
-            await update.message.reply_text(f"Send username for contact {current+1}")
+
+            msg = await update.message.reply_text(f"Send username for contact {current+1}")
+            context.user_data["setup_msgs"].append(msg.message_id)
+
         else:
 
             save_contacts(user_id, context.user_data["contacts"])
-            context.user_data.clear()
+
+            for mid in context.user_data.get("setup_msgs", []):
+                try:
+                    await context.bot.delete_message(update.effective_chat.id, mid)
+                except:
+                    pass
 
             await update.message.reply_text(
-                "Contacts updated.",
+                "Setup Complete.\nWhen you are in danger press the button below.",
                 reply_markup=main_keyboard()
             )
+
+            context.user_data.clear()
+
         return
+
 
     # ---------- FAKE TEXT CHAT ----------
     if step == "fake_chat":
-
-        context.user_data["last_reply"] = asyncio.get_event_loop().time()
+        context.user_data["last_message"] = asyncio.get_event_loop().time()
         return
+
+
+    # ---------- FAKE TEXT QUESTIONS ----------
+
+    if step == "fake_q1":
+        context.user_data["fake_q1"] = text
+        context.user_data["step"] = "fake_q2"
+        await update.message.reply_text("Where are you?")
+        return
+
+    if step == "fake_q2":
+        context.user_data["fake_q2"] = text
+        context.user_data["step"] = "fake_q3"
+        await update.message.reply_text("Any landmarks you can see?")
+        return
+
+    if step == "fake_q3":
+        context.user_data["fake_q3"] = text
+        context.user_data["step"] = "fake_q4"
+        await update.message.reply_text("Are you in a car? If yes give plate number.")
+        return
+
+    if step == "fake_q4":
+
+        context.user_data["fake_q4"] = text
+
+        cursor.execute("SELECT username FROM users WHERE user_id=?", (user_id,))
+        username = cursor.fetchone()[0]
+
+        message = (
+            f"@{username} is in a emergency and needs your help.\n\n"
+            f"Clues:\n"
+            f"People I'm with: {context.user_data['fake_q1']}\n"
+            f"Location: {context.user_data['fake_q2']}\n"
+            f"Landmarks: {context.user_data['fake_q3']}\n"
+            f"Car plate: {context.user_data['fake_q4']}"
+        )
+
+        contacts = get_contacts(user_id)
+
+        for c in contacts:
+            await context.bot.send_message(c, message)
+
+        context.user_data["step"] = "fake_chat"
+
+        await update.message.reply_text(
+            "Information sent to your emergency contacts.\n"
+            "Send your location as well.\n\n"
+            "From this point on just type away and tell me everything you see.\n"
+            "If you stop replying for more than 2 minutes I will alert your emergency contacts.\n\n"
+            "If you are safe press OK."
+        )
+
+        asyncio.create_task(fake_chat_loop(context, user_id))
+
+        return
+
+
+# ---------------- FAKE CHAT LOOP ----------------
+
+async def fake_chat_loop(context, user_id):
+
+    replies = [
+        "Really? That's great! Are you okay?",
+        "Oh that is so cool!",
+        "Tell me more. I'm enjoying myself here."
+    ]
+
+    while True:
+
+        await asyncio.sleep(120)
+
+        if context.user_data.get("step") != "fake_chat":
+            break
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("OK", callback_data="fake_safe")]
+        ])
+
+        await context.bot.send_message(
+            user_id,
+            random.choice(replies),
+            reply_markup=keyboard
+        )
+
 
 # ---------------- BUTTON HANDLER ----------------
 
@@ -199,13 +302,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    # EDIT NAME
     if data == "edit_name":
         context.user_data["step"] = "edit_name"
         await query.edit_message_text("Enter your new name:")
         return
 
-    # UPDATE CONTACTS
     if data == "update_contacts":
 
         keyboard = InlineKeyboardMarkup([
@@ -224,35 +325,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # FAKE TEXTING
     if data == "fake_texting":
-
-        context.user_data["step"] = "fake_chat"
-        context.user_data["last_reply"] = asyncio.get_event_loop().time()
-
-        await query.edit_message_text(
-            "Information sent to your emergency contacts.\nSend your location as well.\n\n"
-            "From this point on just type away and tell me everything you see.\n"
-            "If you stop replying for more than 2 minutes I will alert your emergency contacts.\n"
-            "If you are safe press OK."
-        )
-
-        asyncio.create_task(fake_chat_loop(context, user_id))
-
+        context.user_data["step"] = "fake_q1"
+        await query.edit_message_text("Who are you with?")
         return
 
-    # RESTART
     if data == "restart_setup":
 
         cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
         conn.commit()
 
         context.user_data["step"] = "name"
-
         await query.edit_message_text("Setup restarted.\nWhat is your name?")
         return
 
-    # CONTACT COUNT
     if data.startswith("contacts_"):
 
         count = int(data.split("_")[1])
@@ -264,8 +350,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Send username for contact 1\nExample: @username")
         return
 
-    # SAFE BUTTON
-    if data == "safe":
+    if data == "fake_safe":
 
         contacts = get_contacts(user_id)
 
@@ -274,42 +359,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
 
+        await query.edit_message_text("Glad you're safe.")
+
         await context.bot.send_message(
             user_id,
-            "Glad you're safe.\nPress SEND LOCATION if you are ever in danger.",
+            "When you are in danger press the button below.",
             reply_markup=main_keyboard()
         )
 
-# ---------------- FAKE CHAT LOOP ----------------
-
-async def fake_chat_loop(context, user_id):
-
-    replies = [
-        "Really? That's great! Are you okay?",
-        "Oh that is so cool!",
-        "Tell me more. I'm enjoying myself here."
-    ]
-
-    i = 0
-
-    while True:
-
-        await asyncio.sleep(120)
-
-        if context.user_data.get("step") != "fake_chat":
-            break
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("OK", callback_data="safe")]
-        ])
-
-        await context.bot.send_message(
-            user_id,
-            replies[i % len(replies)],
-            reply_markup=keyboard
-        )
-
-        i += 1
 
 # ---------------- APP ----------------
 
