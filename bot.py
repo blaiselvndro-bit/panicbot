@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 
 TOKEN = os.getenv("BOT_TOKEN")
-BOT_USERNAME = "panic_sos_bot"
+BOT_USERNAME = "@panic_sos_bot"
 
 # ---------------- DATABASE ----------------
 
@@ -56,18 +56,24 @@ def main_keyboard():
     )
 
 def get_contacts(user_id):
+
     cursor.execute("SELECT contacts FROM users WHERE user_id=?", (user_id,))
     row = cursor.fetchone()
+
     if not row or not row[0]:
         return []
+
     return [int(x) for x in row[0].split(",")]
 
 def save_contacts(user_id, contacts):
+
     contacts_str = ",".join(str(x) for x in contacts)
+
     cursor.execute(
         "UPDATE users SET contacts=? WHERE user_id=?",
         (contacts_str, user_id)
     )
+
     conn.commit()
 
 # ---------------- START ----------------
@@ -94,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "When you are in danger press the button below.\n\n"
-            "⚠️ Tip: PIN PANICBOT for fast emergency access.",
+            "⚠️ Tip: PIN PANICBOT for quick access.",
             reply_markup=main_keyboard()
         )
         return
@@ -105,6 +111,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["step"] = "name"
 
+
+# ---------------- MENU ----------------
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Edit Name", callback_data="edit_name")],
+        [InlineKeyboardButton("Update Contacts", callback_data="update_contacts")],
+        [InlineKeyboardButton("Restart Setup", callback_data="restart_setup")]
+    ])
+
+    await update.message.reply_text(
+        "⚙ PANICBOT MENU",
+        reply_markup=keyboard
+    )
 
 # ---------------- TEXT HANDLER ----------------
 
@@ -137,7 +158,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "How many emergency contacts do you want?",
             reply_markup=keyboard
         )
-
         return
 
 
@@ -154,17 +174,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not result:
 
-            share = InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "Share PANICBOT",
-                    url=f"https://t.me/{BOT_USERNAME}"
-                )]
-            ])
-
             await update.message.reply_text(
                 "⚠️ That user hasn't started PANICBOT yet.\n\n"
-                "Ask them to start the bot first so they can receive alerts.",
-                reply_markup=share
+                "Ask them to start the bot first.\n\n"
+                f"Copy and send them this:\n{BOT_USERNAME}"
             )
             return
 
@@ -201,6 +214,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
+    user_id = query.from_user.id
+
+    if data == "edit_name":
+
+        await query.edit_message_text("Enter your new name:")
+        context.user_data["step"] = "name"
+        return
+
+    if data == "update_contacts":
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("1", callback_data="contacts_1"),
+                InlineKeyboardButton("2", callback_data="contacts_2"),
+                InlineKeyboardButton("3", callback_data="contacts_3"),
+                InlineKeyboardButton("4", callback_data="contacts_4"),
+                InlineKeyboardButton("5", callback_data="contacts_5")
+            ]
+        ])
+
+        await query.edit_message_text(
+            "How many emergency contacts do you want?",
+            reply_markup=keyboard
+        )
+        return
+
+
+    if data == "restart_setup":
+
+        cursor.execute(
+            "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
+            (user_id,)
+        )
+
+        conn.commit()
+
+        await query.edit_message_text(
+            "Setup restarted.\n\nWhat is your name?"
+        )
+
+        context.user_data["step"] = "name"
+        return
+
 
     if data.startswith("contacts_"):
 
@@ -295,7 +351,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["force_send"] = False
             break
 
-    await msg.edit_text("SOS has been sent. Please wait for confirmation.")
+    await msg.edit_text("The SOS has been sent. Please wait for confirmation.")
 
     await trigger_alert(update, context, lat, lon)
 
@@ -385,6 +441,7 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("menu", menu))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
