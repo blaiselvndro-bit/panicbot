@@ -39,7 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🚨 Welcome to PANICBOT\n\n"
-        "This bot sends your location to trusted contacts in case of emergency.\n\n"
+        "This bot sends your location to trusted contacts if you are in danger.\n\n"
         "First, what is your name?"
     )
 
@@ -54,78 +54,37 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.message.from_user.id
 
-    # ----- NAME -----
     if step == "name":
 
         context.user_data["name"] = text
 
         await update.message.reply_text(
-            "Send the username of your FIRST emergency contact.\n\n"
-            "Example:\n@johnsmith"
+            "Send the username of your FIRST emergency contact.\n\nExample:\n@johnsmith"
         )
 
         context.user_data["step"] = "contact1"
         return
 
-    # ----- CONTACT 1 -----
+
     if step == "contact1":
 
         context.user_data["contact1"] = text
 
-        keyboard = [
-            [KeyboardButton("➕ Add Second Contact")],
-            [KeyboardButton("⏭ Skip")]
-        ]
-
         await update.message.reply_text(
-            "Would you like to add a second emergency contact?",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard,
-                resize_keyboard=True
-            )
+            "Send the username of your SECOND emergency contact or type SKIP."
         )
 
-        context.user_data["step"] = "ask_second"
+        context.user_data["step"] = "contact2"
         return
 
-    # ----- ASK SECOND -----
-    if step == "ask_second":
 
-        if text == "➕ Add Second Contact":
-
-            await update.message.reply_text(
-                "Send the username of your second emergency contact.\n\nExample:\n@janedoe"
-            )
-
-            context.user_data["step"] = "contact2"
-            return
-
-        if text == "⏭ Skip":
-            contact2 = None
-        else:
-            return
-
-        # save user
-        cursor.execute(
-            "INSERT OR REPLACE INTO users VALUES (?,?,?,?)",
-            (
-                user_id,
-                context.user_data["name"],
-                context.user_data["contact1"],
-                contact2
-            )
-        )
-
-        conn.commit()
-
-        await finish_setup(update, context)
-        return
-
-    # ----- CONTACT 2 -----
     if step == "contact2":
 
         contact2 = text
 
+        if contact2.lower() == "skip":
+            contact2 = None
+
         cursor.execute(
             "INSERT OR REPLACE INTO users VALUES (?,?,?,?)",
             (
@@ -140,19 +99,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await finish_setup(update, context)
         return
-
-    # ----- MAIN MENU BUTTON -----
-    if text == "🚨 SEND EMERGENCY LOCATION":
-
-        keyboard = [[KeyboardButton("📍 Send Location", request_location=True)]]
-
-        await update.message.reply_text(
-            "🚨 EMERGENCY MODE\n\nSend your LIVE LOCATION now.",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard,
-                resize_keyboard=True
-            )
-        )
 
 
 # ---------------- FINISH SETUP ----------------
@@ -176,17 +122,19 @@ async def finish_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"✅ Setup Complete\n\n"
-        f"Name:\n{name}\n\n"
+        f"Name: {name}\n\n"
         f"Emergency Contacts:\n{contacts_text}\n\n"
         f"⚠️ IMPORTANT\n"
-        f"Ask your contacts to start PANICBOT so they can receive alerts.",
+        f"Ask your contacts to START this bot so they can receive emergency alerts.",
         reply_markup=share_button
     )
 
-    keyboard = [[KeyboardButton("🚨 SEND EMERGENCY LOCATION")]]
+    # Immediately request location
+
+    keyboard = [[KeyboardButton("📍 Send Location", request_location=True)]]
 
     await update.message.reply_text(
-        "PANICBOT is ready.",
+        "When you are in danger, press the button below to send your location.",
         reply_markup=ReplyKeyboardMarkup(
             keyboard,
             resize_keyboard=True
@@ -212,7 +160,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = cursor.fetchone()
 
     if not data:
-        await update.message.reply_text("Please run /start first.")
+        await update.message.reply_text("Run /start first.")
         return
 
     name, c1, c2 = data
@@ -227,14 +175,16 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for contact in [c1, c2]:
 
         if contact:
+
             try:
                 await context.bot.send_message(contact, message)
                 await context.bot.send_location(contact, lat, lon)
-            except:
-                pass
+
+            except Exception as e:
+                print(e)
 
     await update.message.reply_text(
-        "✅ Emergency alert sent to your contacts."
+        "🚨 Emergency alert sent."
     )
 
 
