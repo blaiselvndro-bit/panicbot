@@ -386,10 +386,10 @@ async def sos_check_loop(context, user_id):
 
         if not context.user_data.get("sos_ok_pressed"):
 
-            context.user_data["sos_missed"] += 1
+           context.user_data["sos_missed"] += 1
 
-            if context.user_data["sos_missed"] == 2:
-    asyncio.create_task(live_location_loop(context, user_id))
+           if context.user_data["sos_missed"] == 2:
+               asyncio.create_task(live_location_loop(context, user_id))
 
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
