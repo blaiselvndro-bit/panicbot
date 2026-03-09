@@ -134,6 +134,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 c,
                 f"✅ @{username} confirmed they are SAFE."
             )
+            await context.bot.send_message(
+    user_id,
+    "I couldn't confirm your activity. I've sent a message to your emergency contacts."
+)
 
         context.user_data["sos_active"] = False
         context.user_data["step"] = None
@@ -331,6 +335,10 @@ async def fake_chat_loop(context, user_id):
                     c,
                     f"@{username} stopped responding during fake texting."
                 )
+                await context.bot.send_message(
+    user_id,
+    "I couldn't confirm your activity. I've sent a message to your emergency contacts."
+)
 
             if context.user_data["missed_checks"] >= 5:
 
