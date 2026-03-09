@@ -50,11 +50,7 @@ conn.commit()
 
 def main_keyboard():
     return ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("🚨 START PANICBOT", request_location=True)],
-            [KeyboardButton("✏️ EDIT NAME"), KeyboardButton("📱 UPDATE CONTACTS")],
-            [KeyboardButton("💬 FAKE TEXTING"), KeyboardButton("ℹ️ ABOUT")]
-        ],
+        [[KeyboardButton("🚨 SEND LOCATION", request_location=True)]],
         resize_keyboard=True
     )
 
@@ -127,47 +123,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lower = text.lower().strip()
 
-    # ---------------- MENU BUTTONS ----------------
-
-if text == "✏️ EDIT NAME":
-    context.user_data["step"] = "edit_name"
-    await update.message.reply_text("Enter your new name:")
-    return
-
-
-if text == "📱 UPDATE CONTACTS":
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("1", callback_data="contacts_1"),
-            InlineKeyboardButton("2", callback_data="contacts_2"),
-            InlineKeyboardButton("3", callback_data="contacts_3"),
-            InlineKeyboardButton("4", callback_data="contacts_4"),
-            InlineKeyboardButton("5", callback_data="contacts_5")
-        ]
-    ])
-
-    await update.message.reply_text(
-        "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
-        reply_markup=keyboard
-    )
-    return
-
-
-if text == "💬 FAKE TEXTING":
-    context.user_data["step"] = "fake_q1"
-    await update.message.reply_text("Who are you with?")
-    return
-
-
-if text == "ℹ️ ABOUT":
-    await update.message.reply_text(
-        "PANICBOT\n\n"
-        "A safety bot that alerts trusted contacts when you may be in danger.\n"
-        "Includes SOS location alerts and fake texting mode."
-    )
-    return
-
     # GLOBAL SAFE COMMAND
     if lower in ["i am safe", "i'm safe", "safe"]:
 
@@ -180,17 +135,14 @@ if text == "ℹ️ ABOUT":
                 f"✅ @{username} confirmed they are SAFE."
             )
 
-    # STOP ALL MONITORING LOOPS
-    context.user_data["sos_active"] = False
-    context.user_data["step"] = None
-    context.user_data["missed_checks"] = 0
-    context.user_data["sos_missed"] = 0
+        context.user_data["sos_active"] = False
+        context.user_data["step"] = None
 
-    await update.message.reply_text(
-        "Glad you are safe!\n\nWhen you are in danger press the button below.",
-        reply_markup=main_keyboard()
-    )
-    return
+        await update.message.reply_text(
+            "Glad you are safe!",
+            reply_markup=main_keyboard()
+        )
+        return
 
     # STOP FAKE TEXTING
     if step == "fake_chat" and text.lower().strip() == "iam safe":
