@@ -134,10 +134,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 c,
                 f"✅ @{username} confirmed they are SAFE."
             )
-            await context.bot.send_message(
-    user_id,
-    "I couldn't confirm your activity. I've sent a message to your emergency contacts."
-)
 
         context.user_data["sos_active"] = False
         context.user_data["step"] = None
@@ -393,6 +389,10 @@ async def sos_check_loop(context, user_id):
                     c,
                     f"⚠ @{username} is not responding after sending SOS."
                 )
+                await context.bot.send_message(
+    user_id,
+    "I couldn't confirm your activity. I've sent a message to your emergency contacts."
+)
 
             if context.user_data["sos_missed"] >= 5:
 
