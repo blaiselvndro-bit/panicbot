@@ -121,6 +121,28 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
+    lower = text.lower().strip()
+
+    # GLOBAL SAFE COMMAND
+    if lower in ["i am safe", "i'm safe"]:
+
+        contacts = get_contacts(user_id)
+        username = update.message.from_user.username
+
+        for c in contacts:
+            await context.bot.send_message(
+                c,
+                f"✅ @{username} confirmed they are SAFE."
+            )
+
+        context.user_data["sos_active"] = False
+
+        await update.message.reply_text(
+            "Glad you are safe!",
+            reply_markup=main_keyboard()
+        )
+        return
+
     # STOP FAKE TEXTING
     if step == "fake_chat" and text.lower().strip() == "iam safe":
 
@@ -326,6 +348,52 @@ async def fake_chat_loop(context, user_id):
                 break
 
 
+# ---------------- SOS CHECK LOOP ----------------
+
+async def sos_check_loop(context, user_id):
+
+    while context.user_data.get("sos_active"):
+
+        await asyncio.sleep(30)
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Still Here", callback_data="sos_still_here")]
+        ])
+
+        await context.bot.send_message(
+            user_id,
+            "Let me know if you are fine.",
+            reply_markup=keyboard
+        )
+
+        context.user_data["sos_ok_pressed"] = False
+
+        await asyncio.sleep(10)
+
+        if not context.user_data.get("sos_ok_pressed"):
+
+            context.user_data["sos_missed"] += 1
+
+            username = context.user_data.get("username")
+            contacts = get_contacts(user_id)
+
+            for c in contacts:
+                await context.bot.send_message(
+                    c,
+                    f"⚠ @{username} is not responding after sending SOS."
+                )
+
+            if context.user_data["sos_missed"] >= 5:
+
+                for c in contacts:
+                    await context.bot.send_message(
+                        c,
+                        f"🚨 @{username} has stopped responding after SOS alert."
+                    )
+
+                break
+
+
 # ---------------- PHOTO HANDLER ----------------
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -358,6 +426,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
     user_id = query.from_user.id
+
+    if data == "sos_still_here":
+
+        context.user_data["sos_ok_pressed"] = True
+
+        await query.edit_message_reply_markup(reply_markup=None)
+
+        await context.bot.send_message(
+            user_id,
+            "That is great to hear. Let me know once you're safe."
+        )
+        return
 
     if data == "still_here":
 
@@ -475,7 +555,18 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["force_send"] = False
             break
 
-    await msg.edit_text("SOS sent to your emergency contacts. Please wait for confirmation.")
+    await msg.edit_text(
+        "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
+        "I will check on you every 30 seconds.\n"
+        "Press 'Still Here' so I know you are responsive."
+    )
+
+    user_id = update.effective_user.id
+    context.user_data["username"] = update.effective_user.username
+    context.user_data["sos_active"] = True
+    context.user_data["sos_missed"] = 0
+
+    asyncio.create_task(sos_check_loop(context, user_id))
 
     await trigger_alert(update, context, lat, lon)
 
