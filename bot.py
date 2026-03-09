@@ -327,6 +327,9 @@ async def fake_chat_loop(context, user_id):
 
             context.user_data["missed_checks"] += 1
 
+            if context.user_data["missed_checks"] == 2:
+    asyncio.create_task(live_location_loop(context, user_id))
+
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
 
@@ -385,6 +388,9 @@ async def sos_check_loop(context, user_id):
 
             context.user_data["sos_missed"] += 1
 
+            if context.user_data["sos_missed"] == 2:
+    asyncio.create_task(live_location_loop(context, user_id))
+
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
 
@@ -404,6 +410,24 @@ async def sos_check_loop(context, user_id):
 
                 break
 
+# ---------------- LIVE LOCATION LOOP ----------------
+
+async def live_location_loop(context, user_id):
+
+    while context.user_data.get("sos_active"):
+
+        lat = context.user_data.get("last_lat")
+        lon = context.user_data.get("last_lon")
+
+        if not lat or not lon:
+            return
+
+        contacts = get_contacts(user_id)
+
+        for c in contacts:
+            await context.bot.send_location(c, lat, lon)
+
+        await asyncio.sleep(15)
 
 # ---------------- PHOTO HANDLER ----------------
 
@@ -544,6 +568,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = update.message.location.latitude
     lon = update.message.location.longitude
+
+    context.user_data["last_lat"] = lat
+    context.user_data["last_lon"] = lon
 
     keyboard = InlineKeyboardMarkup([
         [
