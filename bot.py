@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import asyncio
-import random
 from telegram import (
     Update,
     KeyboardButton,
@@ -93,7 +92,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await update.message.reply_text("🚨 Welcome to PANICBOT\n\nWhat is your name?")
+    await update.message.reply_text(
+        "🚨 Welcome to PANICBOT\n\nWhat is your name?"
+    )
+
     context.user_data["step"] = "name"
 
 
@@ -119,7 +121,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # stop fake texting
+    # STOP FAKE TEXTING
     if step == "fake_chat" and text.lower().strip() == "iam safe":
 
         contacts = get_contacts(user_id)
@@ -132,7 +134,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Glad you're safe.", reply_markup=main_keyboard())
         return
 
-    # collect clues
+
+    # SAVE CLUES DURING FAKE CHAT
     if step == "fake_chat":
 
         if "clues" not in context.user_data:
@@ -140,6 +143,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["clues"].append(text)
         return
+
 
     if step == "name":
 
@@ -162,6 +166,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
     if step == "edit_name":
 
         cursor.execute("UPDATE users SET name=? WHERE user_id=?", (text, user_id))
@@ -174,6 +179,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
         return
+
 
     if step == "add_contact":
 
@@ -210,7 +216,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # ---------- Fake texting questions ----------
+# ---------- Fake texting questions ----------
 
     if step == "fake_q1":
         context.user_data["fake_q1"] = text
@@ -255,9 +261,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "Information sent to emergency contacts.\n\n"
-            "You can type clues anytime.\n"
+            "You can type clues or details anytime.\n"
             "Type 'Iam Safe' when you are safe.\n\n"
-            "Every 30 seconds I will ask if you are okay."
+            "Every 30 seconds I will ask if you're fine."
         )
 
         asyncio.create_task(fake_chat_loop(context, user_id))
@@ -291,6 +297,7 @@ async def fake_chat_loop(context, user_id):
         if not context.user_data.get("ok_pressed"):
 
             context.user_data["missed_checks"] += 1
+
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
 
@@ -317,6 +324,29 @@ async def fake_chat_loop(context, user_id):
                     await context.bot.send_message(c, report)
 
                 break
+
+
+# ---------------- PHOTO HANDLER ----------------
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    contacts = get_contacts(user_id)
+
+    if not contacts:
+        return
+
+    photo = update.message.photo[-1].file_id
+
+    for c in contacts:
+
+        await context.bot.send_message(
+            c,
+            f"📷 Photo sent by @{username}"
+        )
+
+        await context.bot.send_photo(c, photo)
 
 
 # ---------------- BUTTON HANDLER ----------------
@@ -367,11 +397,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data == "fake_texting":
-        context.user_data["step"] = "fake_q1"
-        await query.edit_message_text("Who are you with?")
-        return
-
     if data == "edit_name":
         context.user_data["step"] = "edit_name"
         await query.edit_message_text("Enter your new name:")
@@ -393,6 +418,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
             reply_markup=keyboard
         )
+        return
+
+    if data == "fake_texting":
+        context.user_data["step"] = "fake_q1"
+        await query.edit_message_text("Who are you with?")
         return
 
     if data == "restart_setup":
