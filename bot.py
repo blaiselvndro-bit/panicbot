@@ -121,8 +121,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # SAFE COMMAND
-    if text.lower().strip() == "iam safe":
+    # STOP FAKE TEXTING
+    if step == "fake_chat" and text.lower().strip() == "iam safe":
 
         contacts = get_contacts(user_id)
 
@@ -135,15 +135,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # RESPONSE DURING MONITORING
-    if step in ["fake_chat", "sos_monitor"]:
-        context.user_data["responded"] = True
+    # SAVE CLUES DURING FAKE CHAT
+    if step == "fake_chat":
 
-        if step == "fake_chat":
-            if "clues" not in context.user_data:
-                context.user_data["clues"] = []
-            context.user_data["clues"].append(text)
+        if "clues" not in context.user_data:
+            context.user_data["clues"] = []
 
+        context.user_data["clues"].append(text)
         return
 
 
@@ -282,8 +280,6 @@ async def fake_chat_loop(context, user_id):
         if context.user_data.get("step") != "fake_chat":
             break
 
-        context.user_data["responded"] = False
-
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Still Here", callback_data="still_here")]
         ])
@@ -294,9 +290,11 @@ async def fake_chat_loop(context, user_id):
             reply_markup=keyboard
         )
 
+        context.user_data["ok_pressed"] = False
+
         await asyncio.sleep(10)
 
-        if not context.user_data.get("responded"):
+        if not context.user_data.get("ok_pressed"):
 
             context.user_data["missed_checks"] += 1
 
@@ -309,38 +307,144 @@ async def fake_chat_loop(context, user_id):
                     f"@{username} stopped responding during fake texting."
                 )
 
+            if context.user_data["missed_checks"] >= 5:
 
-# ---------------- SOS MONITOR LOOP ----------------
+                clues = "\n".join(context.user_data.get("clues", []))
 
-async def sos_monitor_loop(context, user_id):
+                report = (
+                    f"FULL FAKE TEXTING REPORT\n\n"
+                    f"People: {context.user_data.get('fake_q1')}\n"
+                    f"Location: {context.user_data.get('fake_q2')}\n"
+                    f"Landmarks: {context.user_data.get('fake_q3')}\n"
+                    f"Vehicle: {context.user_data.get('fake_q4')}\n\n"
+                    f"Clues:\n{clues}"
+                )
 
-    username = context.user_data.get("username")
+                for c in contacts:
+                    await context.bot.send_message(c, report)
 
-    while True:
+                break
 
-        await asyncio.sleep(30)
 
-        if context.user_data.get("step") != "sos_monitor":
-            break
+# ---------------- PHOTO HANDLER ----------------
 
-        context.user_data["responded"] = False
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    contacts = get_contacts(user_id)
+
+    if not contacts:
+        return
+
+    photo = update.message.photo[-1].file_id
+
+    for c in contacts:
+
+        await context.bot.send_message(
+            c,
+            f"📷 Photo sent by @{username}"
+        )
+
+        await context.bot.send_photo(c, photo)
+
+
+# ---------------- BUTTON HANDLER ----------------
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    user_id = query.from_user.id
+
+    if data == "still_here":
+
+        context.user_data["ok_pressed"] = True
+
+        await query.edit_message_reply_markup(reply_markup=None)
 
         await context.bot.send_message(
             user_id,
-            "Checking on you. Let me know you're okay."
+            "That is great to hear. Let me know once you're safe."
         )
+        return
 
-        await asyncio.sleep(10)
+    if data == "cancel_sos":
+        context.user_data["cancelled"] = True
+        return
 
-        if not context.user_data.get("responded"):
+    if data == "send_now":
+        context.user_data["force_send"] = True
+        return
 
-            contacts = get_contacts(user_id)
+    if data.startswith("confirm_"):
 
-            for c in contacts:
-                await context.bot.send_message(
-                    c,
-                    f"⚠️ @{username} is not responding after sending an SOS.\nPlease check their location and confirm their safety."
-                )
+        alert_id = int(data.split("_")[1])
+
+        cursor.execute("UPDATE alerts SET confirmed=1 WHERE alert_id=?", (alert_id,))
+        conn.commit()
+
+        cursor.execute("SELECT sender_id FROM alerts WHERE alert_id=?", (alert_id,))
+        sender = cursor.fetchone()[0]
+
+        await query.edit_message_text("Alert confirmed. Thank you.")
+
+        await context.bot.send_message(
+            sender,
+            f"✅ @{query.from_user.username} confirmed they received your emergency alert."
+        )
+        return
+
+    if data == "edit_name":
+        context.user_data["step"] = "edit_name"
+        await query.edit_message_text("Enter your new name:")
+        return
+
+    if data == "update_contacts":
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("1", callback_data="contacts_1"),
+                InlineKeyboardButton("2", callback_data="contacts_2"),
+                InlineKeyboardButton("3", callback_data="contacts_3"),
+                InlineKeyboardButton("4", callback_data="contacts_4"),
+                InlineKeyboardButton("5", callback_data="contacts_5")
+            ]
+        ])
+
+        await query.edit_message_text(
+            "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
+            reply_markup=keyboard
+        )
+        return
+
+    if data == "fake_texting":
+        context.user_data["step"] = "fake_q1"
+        await query.edit_message_text("Who are you with?")
+        return
+
+    if data == "restart_setup":
+
+        cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
+        conn.commit()
+
+        context.user_data["step"] = "name"
+
+        await query.edit_message_text("Setup restarted.\nWhat is your name?")
+        return
+
+    if data.startswith("contacts_"):
+
+        count = int(data.split("_")[1])
+
+        context.user_data["contact_count"] = count
+        context.user_data["contacts"] = []
+        context.user_data["step"] = "add_contact"
+
+        await query.edit_message_text("Send username for contact 1\nExample: @username")
+        return
 
 
 # ---------------- LOCATION HANDLER ----------------
@@ -371,16 +475,96 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["force_send"] = False
             break
 
-    await msg.edit_text(
-        "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
-        "I will check on you every 30 seconds.\n"
-        "If you are safe type: Iam Safe"
-    )
-
-    user = update.effective_user
-    context.user_data["step"] = "sos_monitor"
-    context.user_data["username"] = user.username
-
-    asyncio.create_task(sos_monitor_loop(context, user.id))
+    await msg.edit_text("SOS sent to your emergency contacts. Please wait for confirmation.")
 
     await trigger_alert(update, context, lat, lon)
+
+
+# ---------------- ALERT ----------------
+
+async def trigger_alert(update, context, lat, lon):
+
+    user = update.effective_user
+    user_id = user.id
+    username = user.username
+
+    cursor.execute("SELECT name FROM users WHERE user_id=?", (user_id,))
+    name = cursor.fetchone()[0]
+
+    contacts = get_contacts(user_id)
+
+    for contact in contacts:
+
+        cursor.execute(
+            "INSERT INTO alerts (sender_id,contact_id,latitude,longitude) VALUES (?,?,?,?)",
+            (user_id, contact, lat, lon)
+        )
+
+        alert_id = cursor.lastrowid
+        conn.commit()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+        ])
+
+        await context.bot.send_message(
+            contact,
+            f"🚨 EMERGENCY ALERT\n\n@{username} may be in danger.\nName: {name}",
+            reply_markup=keyboard
+        )
+
+        await context.bot.send_location(contact, lat, lon)
+
+        context.job_queue.run_repeating(reminder_job, interval=60, first=60, data={"alert_id": alert_id})
+
+
+# ---------------- REMINDER ----------------
+
+async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
+
+    alert_id = context.job.data["alert_id"]
+
+    cursor.execute(
+        "SELECT sender_id,contact_id,latitude,longitude,confirmed FROM alerts WHERE alert_id=?",
+        (alert_id,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        return
+
+    sender, contact, lat, lon, confirmed = row
+
+    if confirmed:
+        context.job.schedule_removal()
+        return
+
+    cursor.execute("SELECT username FROM users WHERE user_id=?", (sender,))
+    sender_username = cursor.fetchone()[0]
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_{alert_id}")]
+    ])
+
+    await context.bot.send_message(
+        contact,
+        f"🚨 EMERGENCY REMINDER\n\nHave you received the emergency alert from @{sender_username}?",
+        reply_markup=keyboard
+    )
+
+    await context.bot.send_location(contact, lat, lon)
+
+
+# ---------------- APP ----------------
+
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("menu", menu))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+app.add_handler(CallbackQueryHandler(button_handler))
+
+app.run_polling()
