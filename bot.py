@@ -286,7 +286,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Information sent to emergency contacts.\n\n"
             "You can type clues or details anytime.\n"
             "I will check on you every 30 seconds.\n"
-        "Please press “Still Here” to confirm that you are responsive. If you do not respond, I will notify your emergency contacts immediately. Once you are safe, type “Safe” to stop the safety checks."
+            "Please press “Still Here” to confirm that you are responsive.\n"
+            "If you do not respond, I will notify your emergency contacts immediately.\n\n"
+            "Once you are safe, type “Safe” to stop the safety checks."
         )
 
         asyncio.create_task(fake_chat_loop(context, user_id))
@@ -559,7 +561,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(
         "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
         "I will check on you every 30 seconds.\n"
-        "Please press “Still Here” to confirm that you are responsive. If you do not respond, I will notify your emergency contacts immediately. Once you are safe, type “Safe” to stop the safety checks."
+        "Please press “Still Here” to confirm that you are responsive.\n"
+        "If you do not respond, I will notify your emergency contacts immediately.\n\n"
+        "Once you are safe, type “Safe” to stop the safety checks."
     )
 
     user_id = update.effective_user.id
