@@ -171,14 +171,14 @@ if text == "ℹ️ ABOUT":
     # GLOBAL SAFE COMMAND
     if lower in ["i am safe", "i'm safe", "safe"]:
 
-    contacts = get_contacts(user_id)
-    username = update.message.from_user.username
+        contacts = get_contacts(user_id)
+        username = update.message.from_user.username
 
-    for c in contacts:
-        await context.bot.send_message(
-            c,
-            f"✅ @{username} confirmed they are SAFE."
-        )
+        for c in contacts:
+            await context.bot.send_message(
+                c,
+                f"✅ @{username} confirmed they are SAFE."
+            )
 
     # STOP ALL MONITORING LOOPS
     context.user_data["sos_active"] = False
