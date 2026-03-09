@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import asyncio
+import random
 from telegram import (
     Update,
     KeyboardButton,
@@ -134,7 +135,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Glad you're safe.", reply_markup=main_keyboard())
         return
 
-
     # RESPONSE DURING MONITORING
     if step in ["fake_chat", "sos_monitor"]:
         context.user_data["responded"] = True
@@ -223,19 +223,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "fake_q1":
         context.user_data["fake_q1"] = text
         context.user_data["step"] = "fake_q2"
-        await update.message.reply_text("Where are you?")
+        await update.message.reply_text("Who are you with?")
         return
 
     if step == "fake_q2":
         context.user_data["fake_q2"] = text
         context.user_data["step"] = "fake_q3"
-        await update.message.reply_text("Any landmarks you can see?")
+        await update.message.reply_text("Where are you?")
         return
 
     if step == "fake_q3":
         context.user_data["fake_q3"] = text
         context.user_data["step"] = "fake_q4"
-        await update.message.reply_text("Are you in a car? If yes give plate number.")
+        await update.message.reply_text("Any landmarks you can see?")
         return
 
     if step == "fake_q4":
@@ -298,6 +298,7 @@ async def fake_chat_loop(context, user_id):
         if not context.user_data.get("responded"):
 
             context.user_data["missed_checks"] += 1
+
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
 
@@ -308,7 +309,7 @@ async def fake_chat_loop(context, user_id):
                 )
 
 
-# ---------------- SOS MONITOR ----------------
+# ---------------- SOS MONITOR LOOP ----------------
 
 async def sos_monitor_loop(context, user_id):
 
@@ -363,7 +364,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-
     if data == "cancel_sos":
         context.user_data["cancelled"] = True
         return
@@ -371,7 +371,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "send_now":
         context.user_data["force_send"] = True
         return
-
 
     if data == "fake_texting":
         context.user_data["step"] = "fake_q1"
@@ -418,3 +417,17 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["username"] = user.username
 
     asyncio.create_task(sos_monitor_loop(context, user.id))
+
+
+# ---------------- APP ----------------
+
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("menu", menu))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+app.add_handler(CallbackQueryHandler(button_handler))
+
+app.run_polling()
