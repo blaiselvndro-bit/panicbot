@@ -124,7 +124,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lower = text.lower().strip()
 
     # GLOBAL SAFE COMMAND
-    if lower in ["i am safe", "i'm safe"]:
+    if lower in ["i am safe", "i'm safe", "safe"]:
 
         contacts = get_contacts(user_id)
         username = update.message.from_user.username
@@ -136,6 +136,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         context.user_data["sos_active"] = False
+        context.user_data["step"] = None
 
         await update.message.reply_text(
             "Glad you are safe!",
