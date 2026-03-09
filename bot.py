@@ -118,7 +118,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     step = context.user_data.get("step")
 
-    # stop fake texting keyword
+    # Stop fake texting keyword
     if step == "fake_chat" and text.lower().strip() == "iam safe":
 
         contacts = get_contacts(user_id)
@@ -131,7 +131,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Glad you're safe.", reply_markup=main_keyboard())
         return
 
-    # collect fake texting clues
+    # collect clues during fake texting
     if step == "fake_chat":
         context.user_data.setdefault("clues", []).append(text)
         return
@@ -249,7 +249,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "Information sent to emergency contacts.\n\n"
-            "You can now type messages and clues about your surroundings.\n"
+            "You can now type clues about your surroundings.\n"
             "Every 30 seconds I will ask if you're fine.\n"
             "Press 'Still Here' within 10 seconds.\n"
             "If you don't respond I will alert your emergency contacts.\n\n"
@@ -310,6 +310,29 @@ async def fake_chat_loop(context, user_id):
                 break
 
 
+# ---------------- PHOTO HANDLER ----------------
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+    contacts = get_contacts(user_id)
+
+    if not contacts:
+        return
+
+    photo = update.message.photo[-1].file_id
+
+    for c in contacts:
+
+        await context.bot.send_message(
+            c,
+            f"📷 Photo sent by @{username}"
+        )
+
+        await context.bot.send_photo(c, photo)
+
+
 # ---------------- BUTTON HANDLER ----------------
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -318,6 +341,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
+    user_id = query.from_user.id
 
     if data == "fake_here":
 
@@ -328,3 +352,5 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
+
+    # EVERYTHING ELSE LEFT EXACTLY AS YOUR ORIGINAL CODE
