@@ -93,7 +93,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "🚨 Welcome to PANICBOT\n\nWhat is your name?"
+        "🚨 Hi I'm PANICKA\n\nWhat is your name?"
     )
 
     context.user_data["step"] = "name"
@@ -110,7 +110,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Restart Setup", callback_data="restart_setup")]
     ])
 
-    await update.message.reply_text("⚙ PANICBOT MENU", reply_markup=keyboard)
+    await update.message.reply_text("⚙ PANICKA MENU", reply_markup=keyboard)
 
 
 # ---------------- TEXT HANDLER ----------------
@@ -213,7 +213,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not result:
             await update.message.reply_text(
-                f"That user hasn't started PANICBOT.\n\nSend them this:\n{BOT_USERNAME}"
+                f"That user hasn't started PANICKA.\n\nSend them this:\n{BOT_USERNAME}"
             )
             return
 
