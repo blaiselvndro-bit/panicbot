@@ -102,6 +102,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["step"] = "name"
 
+# ---------------- COMMANDS ----------------
+
+async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Press the SOS button below to send your location.",
+        reply_markup=main_keyboard()
+    )
+
+
+async def stealth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["step"] = "fake_q1"
+    await update.message.reply_text("Who are you with?")
+
+
+async def contacts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("1", callback_data="contacts_1"),
+            InlineKeyboardButton("2", callback_data="contacts_2"),
+            InlineKeyboardButton("3", callback_data="contacts_3"),
+            InlineKeyboardButton("4", callback_data="contacts_4"),
+            InlineKeyboardButton("5", callback_data="contacts_5")
+        ]
+    ])
+
+    await update.message.reply_text(
+        "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
+        reply_markup=keyboard
+    )
+
+
+async def name_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["step"] = "edit_name"
+    await update.message.reply_text("Enter your new name:")
+
+
+async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "PANICBOT\n\n"
+        "A safety assistant that alerts trusted contacts if you may be in danger.\n\n"
+        "Features:\n"
+        "• SOS location alert\n"
+        "• Stealth texting\n"
+        "• Activity monitoring"
+    )
 
 # ---------------- MENU ----------------
 
@@ -712,7 +758,12 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("menu", menu))
+
+app.add_handler(CommandHandler("sos", sos_command))
+app.add_handler(CommandHandler("stealth", stealth_command))
+app.add_handler(CommandHandler("contacts", contacts_command))
+app.add_handler(CommandHandler("name", name_command))
+app.add_handler(CommandHandler("about", about_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
