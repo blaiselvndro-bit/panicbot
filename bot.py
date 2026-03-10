@@ -128,50 +128,50 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lower = text.lower().strip()
 # ---------------- MENU BUTTONS ----------------
 
-if text == "✏️ EDIT NAME":
-    context.user_data["step"] = "edit_name"
-    await update.message.reply_text("Enter your new name:")
-    return
+    if text == "✏️ EDIT NAME":
+        context.user_data["step"] = "edit_name"
+        await update.message.reply_text("Enter your new name:")
+        return
 
 
-if text == "📇 UPDATE CONTACTS":
+    if text == "📇 UPDATE CONTACTS":
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("1", callback_data="contacts_1"),
-            InlineKeyboardButton("2", callback_data="contacts_2"),
-            InlineKeyboardButton("3", callback_data="contacts_3"),
-            InlineKeyboardButton("4", callback_data="contacts_4"),
-            InlineKeyboardButton("5", callback_data="contacts_5")
-        ]
-    ])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("1", callback_data="contacts_1"),
+                InlineKeyboardButton("2", callback_data="contacts_2"),
+                InlineKeyboardButton("3", callback_data="contacts_3"),
+                InlineKeyboardButton("4", callback_data="contacts_4"),
+                InlineKeyboardButton("5", callback_data="contacts_5")
+            ]
+        ])
 
-    await update.message.reply_text(
-        "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
-        reply_markup=keyboard
-    )
-    return
-
-
-if text == "🕶 STEALTH TEXTING":
-    context.user_data["step"] = "fake_q1"
-    await update.message.reply_text("Who are you with?")
-    return
+        await update.message.reply_text(
+            "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
+            reply_markup=keyboard
+        )
+        return
 
 
-if text == "ℹ️ ABOUT":
-    await update.message.reply_text(
-        "PANICBOT\n\n"
-        "A safety assistant that alerts trusted contacts when you may be in danger.\n\n"
-        "Features:\n"
-        "• SOS location alert\n"
-        "• Stealth texting mode\n"
-        "• Activity monitoring"
-    )
-    return
+    if text == "🕶 STEALTH TEXTING":
+        context.user_data["step"] = "fake_q1"
+        await update.message.reply_text("Who are you with?")
+        return
+
+
+    if text == "ℹ️ ABOUT":
+        await update.message.reply_text(
+            "PANICBOT\n\n"
+            "A safety assistant that alerts trusted contacts when you may be in danger.\n\n"
+            "Features:\n"
+            "• SOS location alert\n"
+            "• Stealth texting mode\n"
+            "• Activity monitoring"
+        )
+        return
     
-# GLOBAL SAFE COMMAND
-if lower in ["i am safe", "i'm safe", "safe"]:
+    # GLOBAL SAFE COMMAND
+    if lower in ["i am safe", "i'm safe", "safe"]:
 
         contacts = get_contacts(user_id)
         username = update.message.from_user.username
