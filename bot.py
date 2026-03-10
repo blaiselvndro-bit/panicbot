@@ -139,12 +139,14 @@ async def name_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "PANICBOT\n\n"
-        "A safety assistant that alerts trusted contacts if you may be in danger.\n\n"
+        "PANICKA\n\n"
+        "Your personal safety assistant.\n\n"
+        "If you feel unsafe, PANICKA can immediately alert your trusted contacts and share your location.\n\n"
         "Features:\n"
-        "• SOS location alert\n"
-        "• Stealth texting\n"
-        "• Activity monitoring"
+        "• One-tap SOS location alert\n"
+        "• Stealth texting mode\n"
+        "• Activity safety checks\n\n"
+        "© CLG"
     )
 
 # ---------------- MENU ----------------
