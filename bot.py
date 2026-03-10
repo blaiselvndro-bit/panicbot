@@ -51,9 +51,7 @@ conn.commit()
 def main_keyboard():
     return ReplyKeyboardMarkup(
         [
-            [KeyboardButton("🚨 SEND SOS", request_location=True)],
-            [KeyboardButton("🕶 STEALTH TEXTING"), KeyboardButton("📇 UPDATE CONTACTS")],
-            [KeyboardButton("✏️ EDIT NAME"), KeyboardButton("ℹ️ ABOUT")]
+            [KeyboardButton("🚨 SEND SOS", request_location=True)]
         ],
         resize_keyboard=True
     )
