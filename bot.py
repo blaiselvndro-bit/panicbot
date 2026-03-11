@@ -557,15 +557,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data == "cancel_sos":
-        context.user_data["cancelled"] = True
-        await query.answer("SOS canceled")
-        return
 
-    if data == "send_now":
-        context.user_data["force_send"] = True
-        await query.answer("Sending SOS now")
-        return
 
     if data.startswith("confirm_"):
 
@@ -642,28 +634,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lat = update.message.location.latitude
     lon = update.message.location.longitude
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Send Now", callback_data="send_now"),
-            InlineKeyboardButton("Cancel", callback_data="cancel_sos")
-        ]
-    ])
+    
 
-    msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
-
-    for i in range(10):
-
-        await asyncio.sleep(1)
-
-        if context.user_data.get("cancelled"):
-            context.user_data["cancelled"] = False
-            await msg.edit_text("Request canceled.", reply_markup=None)
-            return
-
-        if context.user_data.get("force_send"):
-            context.user_data["force_send"] = False
-            i = 9
-            break
+    msg = await update.message.reply_text("Sending SOS...")
 
     await msg.edit_text(
         "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
