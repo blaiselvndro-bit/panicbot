@@ -478,24 +478,32 @@ async def sos_check_loop(context, user_id):
 
             username = context.user_data.get("username")
             contacts = get_contacts(user_id)
+            lat = context.user_data.get("last_lat")
+            lon = context.user_data.get("last_lon")
 
             for c in contacts:
                 await context.bot.send_message(
                     c,
-                    f"⚠ @{username} is not responding after sending SOS."
+                    f"⚠ @{username} is not responding. Follow-up #{context.user_data['sos_missed']}."
                 )
-                await context.bot.send_message(
-    user_id,
-    "I couldn't confirm your activity. I've sent a message to your emergency contacts."
-)
+                
+                if lat and lon:
+                    await context.bot.send_location(c, lat, lon)
+                
+            await context.bot.send_message(
+                user_id,
+                "I couldn't confirm your activity. I've sent a message to your emergency contacts."
+            )
 
-            if context.user_data["sos_missed"] >= 5:
+            if context.user_data["sos_missed"] >= 10::
 
                 for c in contacts:
                     await context.bot.send_message(
                         c,
-                        f"🚨 @{username} has stopped responding after SOS alert."
+                        f"🚨 FINAL ALERT\n\n@{username} has stopped responding after 10 safety checks.\nThis was their last known location."
                     )
+                    if lat and lon:
+                        await context.bot.send_location(c, lat, lon)
 
                 break
 
@@ -633,6 +641,8 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = update.message.location.latitude
     lon = update.message.location.longitude
+    context.user_data["last_lat"] = lat
+    context.user_data["last_lon"] = lon
 
     
 
