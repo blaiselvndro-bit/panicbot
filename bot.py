@@ -95,7 +95,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "🚨 Welcome to PANICBOT\n\nWhat is your name?"
+        "🚨 Hi I'm PANICKA\n\nWhat is your name?"
     )
 
     context.user_data["step"] = "name"
@@ -160,7 +160,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Restart Setup", callback_data="restart_setup")]
     ])
 
-    await update.message.reply_text("⚙ PANICBOT MENU", reply_markup=keyboard)
+    await update.message.reply_text("⚙ PANICKA MENU", reply_markup=keyboard)
 
 
 # ---------------- TEXT HANDLER ----------------
@@ -207,12 +207,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "ℹ️ ABOUT":
         await update.message.reply_text(
-            "PANICBOT\n\n"
-            "A safety assistant that alerts trusted contacts when you may be in danger.\n\n"
+            "PANICKA\n\n"
+            "Your personal safety assistant.\n\n"
+            "If you feel unsafe, PANICKA can immediately alert your trusted contacts and share your location.\n\n"
             "Features:\n"
-            "• SOS location alert\n"
+            "• One-tap SOS location alert\n"
             "• Stealth texting mode\n"
-            "• Activity monitoring"
+            "• Activity safety checks\n\n"
+            "© CLG"
         )
         return
     
@@ -306,7 +308,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not result:
             await update.message.reply_text(
-                f"That user hasn't started PANICBOT.\n\nSend them this:\n{BOT_USERNAME}"
+                f"That user hasn't started PANICKA.\n\nSend them this:\n{BOT_USERNAME}"
             )
             return
 
@@ -557,10 +559,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "cancel_sos":
         context.user_data["cancelled"] = True
+        await query.answer("SOS canceled")
         return
 
     if data == "send_now":
         context.user_data["force_send"] = True
+        await query.answer("Sending SOS now")
         return
 
     if data.startswith("confirm_"):
@@ -649,15 +653,17 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for i in range(10):
 
-        await asyncio.sleep(1)
+    await asyncio.sleep(1)
 
-        if context.user_data.get("cancelled"):
-            context.user_data["cancelled"] = False
-            return
+    if context.user_data.get("cancelled"):
+        context.user_data["cancelled"] = False
 
-        if context.user_data.get("force_send"):
-            context.user_data["force_send"] = False
-            break
+        await msg.edit_text("Request canceled.")
+        return
+
+    if context.user_data.get("force_send"):
+        context.user_data["force_send"] = False
+        break
 
     await msg.edit_text(
         "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
