@@ -651,7 +651,15 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
 
-    for i in range(10):
+    context.user_data["cancelled"] = False
+    context.user_data["force_send"] = False
+
+    for i in range(10, 0, -1):
+
+        await msg.edit_text(
+            f"SOS will send in {i} seconds.",
+            reply_markup=keyboard
+        )
 
         await asyncio.sleep(1)
 
