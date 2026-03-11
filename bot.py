@@ -495,7 +495,7 @@ async def sos_check_loop(context, user_id):
                 "I couldn't confirm your activity. I've sent a message to your emergency contacts."
             )
 
-            if context.user_data["sos_missed"] >= 10::
+            if context.user_data["sos_missed"] >= 10:
 
                 for c in contacts:
                     await context.bot.send_message(
