@@ -662,6 +662,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if context.user_data.get("force_send"):
             context.user_data["force_send"] = False
+            i = 9
             break
 
     await msg.edit_text(
