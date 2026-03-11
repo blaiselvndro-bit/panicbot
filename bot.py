@@ -651,15 +651,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text("SOS will send in 10 seconds.", reply_markup=keyboard)
 
-    context.user_data["cancelled"] = False
-    context.user_data["force_send"] = False
-
-    for i in range(10, 0, -1):
-
-        await msg.edit_text(
-            f"SOS will send in {i} seconds.",
-            reply_markup=keyboard
-        )
+    for i in range(10):
 
         await asyncio.sleep(1)
 
@@ -778,8 +770,8 @@ app.add_handler(CommandHandler("stealth", stealth_command))
 app.add_handler(CommandHandler("contacts", contacts_command))
 app.add_handler(CommandHandler("name", name_command))
 app.add_handler(CommandHandler("about", about_command))
-app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
 
