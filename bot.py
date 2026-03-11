@@ -655,15 +655,14 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await asyncio.sleep(1)
 
-    if context.user_data.get("cancelled"):
-        context.user_data["cancelled"] = False
+        if context.user_data.get("cancelled"):
+            context.user_data["cancelled"] = False
+            await msg.edit_text("Request canceled.", reply_markup=None)
+            return
 
-        await msg.edit_text("Request canceled.")
-        return
-
-    if context.user_data.get("force_send"):
-        context.user_data["force_send"] = False
-        break
+        if context.user_data.get("force_send"):
+            context.user_data["force_send"] = False
+            break
 
     await msg.edit_text(
         "SOS sent to your emergency contacts. Please wait for confirmation.\n\n"
