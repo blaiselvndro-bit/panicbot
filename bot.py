@@ -149,6 +149,19 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "© CLG"
     )
 
+async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("💛 Donate to PANICKA", url="https://paymongo.page/l/panicka")]
+    ])
+
+    await update.message.reply_text(
+        "💛 Support PANICKA\n\n"
+        "If you think this bot can help you feel safer, you can support its development here.\n\n"
+        "Your support helps keep PANICKA running and improving for everyone.",
+        reply_markup=keyboard
+    )
+
 # ---------------- MENU ----------------
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -752,6 +765,7 @@ app.add_handler(CommandHandler("sos", sos_command))
 app.add_handler(CommandHandler("stealth", stealth_command))
 app.add_handler(CommandHandler("contacts", contacts_command))
 app.add_handler(CommandHandler("name", name_command))
+app.add_handler(CommandHandler("about", about_command))
 app.add_handler(CommandHandler("about", about_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
