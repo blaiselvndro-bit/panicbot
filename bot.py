@@ -568,6 +568,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
+
+    # ---------------- SOS CHECK RESPONSE ----------------
     if data == "sos_still_here":
 
         context.user_data["sos_ok_pressed"] = True
@@ -578,48 +580,55 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id,
             "That is great to hear. Let me know once you're safe."
         )
+
         return
-        
-   if data == "restart_yes":
-
-       cursor.execute(
-           "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
-           (user_id,)
-       )
-       conn.commit()
-
-       context.user_data["step"] = "name"
-
-       await query.edit_message_text(
-           "Setup restarted.\n\nWhat is your name?"
-       )
-
-       return
 
 
-if data == "restart_no":
+    # ---------------- RESTART SETUP YES ----------------
+    if data == "restart_yes":
 
-    await query.edit_message_text(
-        "Okay 👍 Your current setup will remain active."
-    )
+        cursor.execute(
+            "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
+            (user_id,)
+        )
+        conn.commit()
 
-    await context.bot.send_message(
-        user_id,
-        "Press the SOS button if you need help.",
-        reply_markup=main_keyboard()
-    )
+        context.user_data["step"] = "name"
 
-    return
-    
+        await query.edit_message_text(
+            "Setup restarted.\n\nWhat is your name?"
+        )
+
+        return
+
+
+    # ---------------- RESTART SETUP NO ----------------
+    if data == "restart_no":
+
+        await query.edit_message_text(
+            "Okay 👍 Your current setup will remain active."
+        )
+
+        await context.bot.send_message(
+            user_id,
+            "Press the SOS button if you need help.",
+            reply_markup=main_keyboard()
+        )
+
+        return
+
+
+    # ---------------- FOLLOW-UP CONFIRM ----------------
     if data == "confirm_followup":
-        
+
         context.user_data["sos_active"] = False
-        
+
         await query.edit_message_reply_markup(reply_markup=None)
 
         cursor.execute(
             "SELECT sender_id FROM alerts ORDER BY alert_id DESC LIMIT 1"
         )
+
         sender = cursor.fetchone()
 
         if sender:
@@ -631,7 +640,9 @@ if data == "restart_no":
             )
 
         return
-    
+
+
+    # ---------------- FAKE CHAT RESPONSE ----------------
     if data == "still_here":
 
         context.user_data["ok_pressed"] = True
@@ -642,18 +653,26 @@ if data == "restart_no":
             user_id,
             "That is great to hear. Let me know once you're safe."
         )
+
         return
 
 
-
+    # ---------------- ORIGINAL CONFIRM SYSTEM ----------------
     if data.startswith("confirm_"):
 
         alert_id = int(data.split("_")[1])
 
-        cursor.execute("UPDATE alerts SET confirmed=1 WHERE alert_id=?", (alert_id,))
+        cursor.execute(
+            "UPDATE alerts SET confirmed=1 WHERE alert_id=?",
+            (alert_id,)
+        )
         conn.commit()
 
-        cursor.execute("SELECT sender_id FROM alerts WHERE alert_id=?", (alert_id,))
+        cursor.execute(
+            "SELECT sender_id FROM alerts WHERE alert_id=?",
+            (alert_id,)
+        )
+
         sender = cursor.fetchone()[0]
 
         await query.edit_message_text("Alert confirmed. Thank you.")
@@ -662,12 +681,16 @@ if data == "restart_no":
             sender,
             f"✅ @{query.from_user.username} confirmed they received your emergency alert."
         )
+
         return
 
+
+    # ---------------- MENU OPTIONS ----------------
     if data == "edit_name":
         context.user_data["step"] = "edit_name"
         await query.edit_message_text("Enter your new name:")
         return
+
 
     if data == "update_contacts":
 
@@ -685,22 +708,32 @@ if data == "restart_no":
             "Updating contacts will remove ALL existing contacts.\n\nHow many contacts do you want?",
             reply_markup=keyboard
         )
+
         return
+
 
     if data == "fake_texting":
         context.user_data["step"] = "fake_q1"
         await query.edit_message_text("Who are you with?")
         return
 
+
     if data == "restart_setup":
 
-        cursor.execute("UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?", (user_id,))
+        cursor.execute(
+            "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
+            (user_id,)
+        )
         conn.commit()
 
         context.user_data["step"] = "name"
 
-        await query.edit_message_text("Setup restarted.\nWhat is your name?")
+        await query.edit_message_text(
+            "Setup restarted.\nWhat is your name?"
+        )
+
         return
+
 
     if data.startswith("contacts_"):
 
@@ -710,7 +743,10 @@ if data == "restart_no":
         context.user_data["contacts"] = []
         context.user_data["step"] = "add_contact"
 
-        await query.edit_message_text("Send username for contact 1\nExample: @username")
+        await query.edit_message_text(
+            "Send username for contact 1\nExample: @username"
+        )
+
         return
 
 
