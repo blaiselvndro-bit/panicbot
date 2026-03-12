@@ -81,19 +81,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "INSERT OR IGNORE INTO users (user_id, username) VALUES (?,?)",
         (user.id, user.username)
     )
-
     conn.commit()
 
-    cursor.execute("SELECT name,contacts FROM users WHERE user_id=?", (user.id,))
+    cursor.execute("SELECT name, contacts FROM users WHERE user_id=?", (user.id,))
     row = cursor.fetchone()
 
+    # USER ALREADY SETUP
     if row and row[0] and row[1]:
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("YES", callback_data="restart_yes"),
+                InlineKeyboardButton("NO", callback_data="restart_no")
+            ]
+        ])
+
         await update.message.reply_text(
-            "When you are in danger press the button below.",
-            reply_markup=main_keyboard()
+            "You have already setup PANICKA.\n\nDo you want to restart the setup?",
+            reply_markup=keyboard
         )
+
         return
 
+    # NEW USER SETUP
     await update.message.reply_text(
         "🚨 Hi I'm PANICKA\n\nWhat is your name?"
     )
@@ -569,7 +579,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "That is great to hear. Let me know once you're safe."
         )
         return
+        
+        if data == "restart_yes":
 
+    cursor.execute(
+        "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
+        (user_id,)
+    )
+    conn.commit()
+
+    context.user_data["step"] = "name"
+
+    await query.edit_message_text(
+        "Setup restarted.\n\nWhat is your name?"
+    )
+
+    return
+
+
+if data == "restart_no":
+
+    await query.edit_message_text(
+        "Okay 👍 Your current setup will remain active."
+    )
+
+    await context.bot.send_message(
+        user_id,
+        "Press the SOS button if you need help.",
+        reply_markup=main_keyboard()
+    )
+
+    return
+    
     if data == "confirm_followup":
         await query.answer("Confirmation sent")
         
