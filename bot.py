@@ -254,6 +254,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         context.user_data["sos_active"] = False
+        context.user_data["sos_ok_pressed"] = True
         context.user_data["step"] = None
 
         await update.message.reply_text(
@@ -481,16 +482,30 @@ async def sos_check_loop(context, user_id):
 
         await asyncio.sleep(30)
 
+        # Remove previous Still Here button
+        last_msg = context.user_data.get("last_check_msg")
+
+        if last_msg:
+            try:
+                await context.bot.edit_message_reply_markup(
+                    chat_id=user_id,
+                    message_id=last_msg,
+                    reply_markup=None
+                )
+            except:
+                pass
+
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Still Here", callback_data="sos_still_here")]
         ])
 
-        await context.bot.send_message(
+        msg = await context.bot.send_message(
             user_id,
             "Let me know if you are fine.",
             reply_markup=keyboard
         )
 
+        context.user_data["last_check_msg"] = msg.message_id
         context.user_data["sos_ok_pressed"] = False
 
         await asyncio.sleep(10)
@@ -500,7 +515,14 @@ async def sos_check_loop(context, user_id):
             context.user_data["sos_missed"] += 1
 
             username = context.user_data.get("username")
-            contacts = get_contacts(user_id)
+            
+            cursor.execute(
+                "SELECT contact_id FROM alerts WHERE sender_id=? AND confirmed=0",
+                (user_id,)
+            )
+
+            contacts = [row[0] for row in cursor.fetchall()]
+
             lat = context.user_data.get("last_lat")
             lon = context.user_data.get("last_lon")
 
