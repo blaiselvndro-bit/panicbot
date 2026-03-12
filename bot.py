@@ -529,7 +529,7 @@ async def sos_check_loop(context, user_id):
             for c in contacts:
                 
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("CONFIRM", callback_data="confirm_followup")]
+                    [InlineKeyboardButton("CONFIRM", callback_data=f"confirm_followup_{c}")]
                 ])
                 await context.bot.send_message(
                     c,
@@ -641,14 +641,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     # ---------------- FOLLOW-UP CONFIRM ----------------
-    if data == "confirm_followup":
+    if data.startswith("confirm_followup_"):
 
-        context.user_data["sos_active"] = False
+        contact_id = int(data.split("_")[2])
+
+        cursor.execute(
+            "UPDATE alerts SET confirmed=1 WHERE contact_id=?",
+            (contact_id,)
+        )
+        conn.commit()
 
         await query.edit_message_reply_markup(reply_markup=None)
 
         cursor.execute(
-            "SELECT sender_id FROM alerts ORDER BY alert_id DESC LIMIT 1"
+            "SELECT sender_id FROM alerts WHERE contact_id=? ORDER BY alert_id DESC LIMIT 1",
+            (contact_id,)
         )
 
         sender = cursor.fetchone()
