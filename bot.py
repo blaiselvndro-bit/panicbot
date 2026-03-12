@@ -495,13 +495,17 @@ async def sos_check_loop(context, user_id):
             lon = context.user_data.get("last_lon")
 
             for c in contacts:
+                
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("CONFIRM", callback_data="confirm_followup")]
+                ])
                 await context.bot.send_message(
                     c,
                     f"⚠ @{username} is not responding. Follow-up #{context.user_data['sos_missed']}."
                 )
                 
                 if lat and lon:
-                    await context.bot.send_location(c, lat, lon)
+                    await context.bot.send_location(c, lat, lon, reply_markup=keyboard)
                 
             await context.bot.send_message(
                 user_id,
@@ -566,6 +570,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data == "confirm_followup":
+    await query.answer("Confirmation sent")
+    context.user_data["sos_active"] = False
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    cursor.execute(
+        "SELECT sender_id FROM alerts ORDER BY alert_id DESC LIMIT 1"
+    )
+    sender = cursor.fetchone()
+
+    if sender:
+        sender_id = sender[0]
+
+        await context.bot.send_message(
+            sender_id,
+            f"✅ @{query.from_user.username} confirmed they received your emergency alert."
+        )
+
+    return
+    
     if data == "still_here":
 
         context.user_data["ok_pressed"] = True
