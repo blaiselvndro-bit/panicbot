@@ -215,7 +215,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "📷 TAKE PHOTO":
 
         await update.message.reply_text(
-            "📷 Take a photo and send it now."
+            "📷 Take a photo and send it now.",
             reply_markup=camera_keyboard()
         )
 
