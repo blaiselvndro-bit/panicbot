@@ -571,24 +571,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "confirm_followup":
-    await query.answer("Confirmation sent")
-    context.user_data["sos_active"] = False
-    await query.edit_message_reply_markup(reply_markup=None)
+        await query.answer("Confirmation sent")
+        
+        context.user_data["sos_active"] = False
+        
+        await query.edit_message_reply_markup(reply_markup=None)
 
-    cursor.execute(
-        "SELECT sender_id FROM alerts ORDER BY alert_id DESC LIMIT 1"
-    )
-    sender = cursor.fetchone()
-
-    if sender:
-        sender_id = sender[0]
-
-        await context.bot.send_message(
-            sender_id,
-            f"✅ @{query.from_user.username} confirmed they received your emergency alert."
+        cursor.execute(
+            "SELECT sender_id FROM alerts ORDER BY alert_id DESC LIMIT 1"
         )
+        sender = cursor.fetchone()
 
-    return
+        if sender:
+            sender_id = sender[0]
+
+            await context.bot.send_message(
+                sender_id,
+                f"✅ @{query.from_user.username} confirmed they received your emergency alert."
+            )
+
+        return
     
     if data == "still_here":
 
