@@ -582,19 +582,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if data == "restart_yes":
 
-    cursor.execute(
-        "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
-        (user_id,)
-    )
-    conn.commit()
+            cursor.execute(
+                "UPDATE users SET name=NULL, contacts=NULL WHERE user_id=?",
+                (user_id,)
+            )
+            conn.commit()
 
-    context.user_data["step"] = "name"
+            context.user_data["step"] = "name"
 
-    await query.edit_message_text(
-        "Setup restarted.\n\nWhat is your name?"
-    )
+            await query.edit_message_text(
+                "Setup restarted.\n\nWhat is your name?"
+            )
 
-    return
+            return
 
 
 if data == "restart_no":
