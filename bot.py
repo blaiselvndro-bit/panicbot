@@ -55,7 +55,15 @@ def main_keyboard():
         ],
         resize_keyboard=True
     )
-
+    
+def camera_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📷 TAKE PHOTO")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
 def get_contacts(user_id):
     cursor.execute("SELECT contacts FROM users WHERE user_id=?", (user_id,))
@@ -118,6 +126,12 @@ async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_keyboard()
     )
 
+async def photo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "📷 Take a photo now.",
+        reply_markup=camera_keyboard()
+    )
 
 async def stealth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["step"] = "fake_q1"
@@ -195,6 +209,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     step = context.user_data.get("step")
 
     lower = text.lower().strip()
+
+# ---------------- CAMERA BUTTON ----------------
+
+    if text == "📷 TAKE PHOTO":
+
+        await update.message.reply_text(
+            "📷 Take a photo and send it now."
+            reply_markup=camera_keyboard()
+        )
+
+        return
+
 # ---------------- MENU BUTTONS ----------------
 
     if text == "✏️ EDIT NAME":
@@ -579,6 +605,11 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_photo(c, photo)
 
+    await update.message.reply_text(
+        "Photo sent.",
+        reply_markup=main_keyboard()
+    )
+
 
 # ---------------- BUTTON HANDLER ----------------
 
@@ -898,6 +929,7 @@ app.add_handler(CommandHandler("contacts", contacts_command))
 app.add_handler(CommandHandler("name", name_command))
 app.add_handler(CommandHandler("about", about_command))
 app.add_handler(CommandHandler("donate", donate_command))
+app.add_handler(CommandHandler("photo", photo_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
